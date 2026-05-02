@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>バランスシート ビジュアライザー</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f8f7f4; color: #1a1a1a; min-height: 100vh; }
+header { padding: 1.5rem 2rem; background: #fff; border-bottom: 0.5px solid #e0ddd8; }
+header h1 { font-size: 16px; font-weight: 500; color: #1a1a1a; }
+header p { font-size: 12px; color: #888; margin-top: 2px; }
+.main { max-width: 860px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+.summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 1.25rem; }
+.metric { background: #fff; border: 0.5px solid #e0ddd8; border-radius: 10px; padding: 0.75rem 1rem; }
+.metric-label { font-size: 11px; color: #888; margin-bottom: 2px; }
+.metric-value { font-size: 18px; font-weight: 500; }
+.bs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 1.25rem; }
+.bs-col { background: #fff; border: 0.5px solid #e0ddd8; border-radius: 10px; overflow: hidden; }
+.section-header { padding: 8px 12px; font-size: 12px; font-weight: 500; display: flex; justify-content: space-between; align-items: center; }
+.sub-header { padding: 5px 12px; font-size: 11px; color: #666; background: #f8f7f4; border-top: 0.5px solid #e0ddd8; display: flex; justify-content: space-between; align-items: center; }
+.item-row { display: flex; align-items: center; padding: 5px 8px 5px 12px; border-top: 0.5px solid #e0ddd8; gap: 5px; }
+.item-name { width: 90px; min-width: 90px; font-size: 12px; border: 0.5px solid #e0ddd8; border-radius: 6px; padding: 3px 6px; background: #fff; color: #1a1a1a; outline: none; }
+.item-name::placeholder { color: #bbb; }
+.item-val { width: 80px; min-width: 80px; font-size: 12px; text-align: right; border: 0.5px solid #e0ddd8; border-radius: 6px; padding: 3px 6px; background: #fff; color: #1a1a1a; }
+.color-dot { width: 18px; height: 18px; min-width: 18px; border-radius: 50%; border: 0.5px solid #ccc; cursor: pointer; flex-shrink: 0; position: relative; overflow: hidden; }
+.color-dot input[type=color] { position: absolute; inset: -4px; width: calc(100% + 8px); height: calc(100% + 8px); opacity: 0; cursor: pointer; }
+.del-btn { background: none; border: none; cursor: pointer; color: #bbb; font-size: 14px; padding: 0 2px; line-height: 1; flex-shrink: 0; }
+.del-btn:hover { color: #E24B4A; }
+.add-btn { background: none; border: none; cursor: pointer; color: #888; font-size: 11px; padding: 0; }
+.add-btn:hover { color: #1a1a1a; }
+.subtotal { display: flex; justify-content: space-between; padding: 6px 12px; border-top: 1px solid #e0ddd8; font-size: 12px; font-weight: 500; }
+.chart-area { background: #fff; border: 0.5px solid #e0ddd8; border-radius: 10px; padding: 1rem 1.25rem; }
+.chart-title { font-size: 12px; color: #888; margin-bottom: 12px; }
+.bar-wrap { display: flex; gap: 16px; }
+.bar-group { flex: 1; }
+.bar-col { display: flex; flex-direction: column; gap: 2px; height: 200px; }
+.bar-seg { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; padding: 0 4px; border-radius: 2px; }
+.seg-name { font-size: 11px; font-weight: 500; color: #fff; text-align: center; line-height: 1.3; }
+.seg-val { font-size: 10px; color: rgba(255,255,255,0.9); text-align: center; line-height: 1.3; }
+.bar-lbl { font-size: 11px; color: #888; text-align: center; margin-top: 6px; }
+.balance-check { margin-top: 10px; font-size: 12px; padding: 6px 10px; border-radius: 8px; text-align: center; }
+.balanced { background: #EAF3DE; color: #27500A; }
+.unbalanced { background: #FCEBEB; color: #791F1F; }
+.neutral { background: #f8f7f4; color: #888; }
+</style>
+</head>
+<body>
+<header>
+  <h1>バランスシート ビジュアライザー</h1>
+  <p>項目を自由に追加・削除して貸借対照表を可視化できます</p>
+</header>
+<div class="main">
+  <div class="summary-grid">
+    <div class="metric"><div class="metric-label">総資産</div><div class="metric-value" id="s-asset">¥0</div></div>
+    <div class="metric"><div class="metric-label">総負債</div><div class="metric-value" id="s-liability">¥0</div></div>
+    <div class="metric"><div class="metric-label">純資産</div><div class="metric-value" id="s-equity">¥0</div></div>
+  </div>
+
+  <div class="bs-grid">
+    <div class="bs-col">
+      <div class="section-header" style="background:#E6F1FB;color:#0C447C;">資産の部</div>
+      <div class="sub-header"><span>流動資産</span><button class="add-btn" onclick="addItem('asset-current')">+ 追加</button></div>
+      <div id="asset-current-items"></div>
+      <div class="subtotal"><span>流動資産合計</span><span id="sub-asset-current">¥0</span></div>
+      <div class="sub-header"><span>固定資産</span><button class="add-btn" onclick="addItem('asset-fixed')">+ 追加</button></div>
+      <div id="asset-fixed-items"></div>
+      <div class="subtotal"><span>固定資産合計</span><span id="sub-asset-fixed">¥0</span></div>
+    </div>
+    <div class="bs-col">
+      <div class="section-header" style="background:#FAECE7;color:#712B13;">負債の部</div>
+      <div class="sub-header"><span>流動負債</span><button class="add-btn" onclick="addItem('liability-current')">+ 追加</button></div>
+      <div id="liability-current-items"></div>
+      <div class="subtotal"><span>流動負債合計</span><span id="sub-liability-current">¥0</span></div>
+      <div class="sub-header"><span>固定負債</span><button class="add-btn" onclick="addItem('liability-fixed')">+ 追加</button></div>
+      <div id="liability-fixed-items"></div>
+      <div class="subtotal"><span>固定負債合計</span><span id="sub-liability-fixed">¥0</span></div>
+      <div class="section-header" style="background:#EAF3DE;color:#27500A;border-top:0.5px solid #e0ddd8;">純資産の部 <button class="add-btn" style="color:#27500A;" onclick="addItem('equity')">+ 追加</button></div>
+      <div id="equity-items"></div>
+      <div class="subtotal"><span>純資産合計</span><span id="sub-equity">¥0</span></div>
+    </div>
+  </div>
+
+  <div class="chart-area">
+    <p class="chart-title">構成比の可視化（丸いドットをクリックで色を変更）</p>
+    <div class="bar-wrap">
+      <div class="bar-group">
+        <div class="bar-col" id="bar-asset"></div>
+        <div class="bar-lbl">資産</div>
+      </div>
+      <div class="bar-group">
+        <div class="bar-col" id="bar-rhs"></div>
+        <div class="bar-lbl">負債 + 純資産</div>
+      </div>
+    </div>
+    <div class="balance-check neutral" id="balance-msg">数値を入力してください</div>
+  </div>
+</div>
+
+<script>
+const fmt = v => {
+  if(v===0) return '¥0';
+  if(v>=1e8) return `¥${(v/1e8).toFixed(1)}億`;
+  if(v>=1e4) return `¥${Math.round(v/1e4)}万`;
+  return `¥${Math.round(v).toLocaleString()}`;
+};
+const SECTION_COLORS = {
+  'asset-current':'#378ADD','asset-fixed':'#185FA5',
+  'liability-current':'#D85A30','liability-fixed':'#993C1D','equity':'#639922'
+};
+const SECTION_LABELS = {
+  'asset-current':'流動資産','asset-fixed':'固定資産',
+  'liability-current':'流動負債','liability-fixed':'固定負債','equity':'純資産'
+};
+const DEFAULT_ITEM_COLORS = {
+  'asset-current':['#378ADD','#5B9FE8','#85B7EB','#B5D4F4'],
+  'asset-fixed':['#185FA5','#0C447C','#1A6FBB','#2480CC'],
+  'liability-current':['#D85A30','#E06B44','#E87C58','#F0997B'],
+  'liability-fixed':['#993C1D','#B24522','#CC4E27','#D85A30'],
+  'equity':['#639922','#7AB82A','#97C459','#C0DD97']
+};
+const DEFAULTS = {
+  'asset-current':['現金・預金','売掛金','棚卸資産'],
+  'asset-fixed':['有形固定資産','無形固定資産','投資その他資産'],
+  'liability-current':['買掛金','短期借入金','未払金'],
+  'liability-fixed':['長期借入金','社債'],
+  'equity':['資本金','資本剰余金','利益剰余金']
+};
+const counters = {};
+function addItem(section, name='', value='') {
+  counters[section] = (counters[section]||0) + 1;
+  const colorList = DEFAULT_ITEM_COLORS[section] || ['#888780'];
+  const color = colorList[(counters[section]-1) % colorList.length];
+  const container = document.getElementById(section + '-items');
+  const row = document.createElement('div');
+  row.className = 'item-row';
+  row.innerHTML = `
+    <div class="color-dot" style="background:${color};" title="色を変更"><input type="color" value="${color}"></div>
+    <input class="item-name" type="text" placeholder="項目名" value="${name}">
+    <input class="item-val" type="number" placeholder="0" value="${value}" min="0">
+    <button class="del-btn" title="削除">×</button>
+  `;
+  const colorInput = row.querySelector('input[type=color]');
+  const dot = row.querySelector('.color-dot');
+  colorInput.addEventListener('input', e => { dot.style.background = e.target.value; recalc(); });
+  row.querySelector('.item-val').addEventListener('input', recalc);
+  row.querySelector('.item-name').addEventListener('input', recalc);
+  row.querySelector('.del-btn').addEventListener('click', () => { row.remove(); recalc(); });
+  container.appendChild(row);
+  recalc();
+}
+function sumSection(section) {
+  return Array.from(document.querySelectorAll(`#${section}-items .item-val`))
+    .reduce((a,i) => a + (parseFloat(i.value)||0), 0);
+}
+function makeSeg(val, max, H, color, label) {
+  if(val <= 0) return null;
+  const h = Math.round(val / max * H);
+  if(h <= 0) return null;
+  const seg = document.createElement('div');
+  seg.className = 'bar-seg';
+  seg.style.cssText = `height:${h}px;background:${color};`;
+  seg.title = `${label}: ${fmt(val)}`;
+  if(h >= 36) seg.innerHTML = `<span class="seg-name">${label}</span><span class="seg-val">${fmt(val)}</span>`;
+  else if(h >= 18) seg.innerHTML = `<span class="seg-val">${fmt(val)}</span>`;
+  return seg;
+}
+function drawBars() {
+  const ca=sumSection('asset-current'), fa=sumSection('asset-fixed');
+  const cl=sumSection('liability-current'), fl=sumSection('liability-fixed'), eq=sumSection('equity');
+  const max = Math.max(ca+fa, cl+fl+eq, 1);
+  const H = 200;
+  const barAsset = document.getElementById('bar-asset');
+  barAsset.innerHTML = '';
+  const segCA = makeSeg(ca, max, H, SECTION_COLORS['asset-current'], SECTION_LABELS['asset-current']);
+  const segFA = makeSeg(fa, max, H, SECTION_COLORS['asset-fixed'], SECTION_LABELS['asset-fixed']);
+  if(segCA) barAsset.appendChild(segCA);
+  if(segFA) barAsset.appendChild(segFA);
+  const barRhs = document.getElementById('bar-rhs');
+  barRhs.innerHTML = '';
+  const segCL = makeSeg(cl, max, H, SECTION_COLORS['liability-current'], SECTION_LABELS['liability-current']);
+  const segFL = makeSeg(fl, max, H, SECTION_COLORS['liability-fixed'], SECTION_LABELS['liability-fixed']);
+  const segEQ = makeSeg(eq, max, H, SECTION_COLORS['equity'], SECTION_LABELS['equity']);
+  if(segCL) barRhs.appendChild(segCL);
+  if(segFL) barRhs.appendChild(segFL);
+  if(segEQ) barRhs.appendChild(segEQ);
+}
+function recalc() {
+  const ca=sumSection('asset-current'), fa=sumSection('asset-fixed');
+  const cl=sumSection('liability-current'), fl=sumSection('liability-fixed'), eq=sumSection('equity');
+  const ta=ca+fa, tl=cl+fl, rhs=tl+eq;
+  document.getElementById('sub-asset-current').textContent = fmt(ca);
+  document.getElementById('sub-asset-fixed').textContent = fmt(fa);
+  document.getElementById('sub-liability-current').textContent = fmt(cl);
+  document.getElementById('sub-liability-fixed').textContent = fmt(fl);
+  document.getElementById('sub-equity').textContent = fmt(eq);
+  document.getElementById('s-asset').textContent = fmt(ta);
+  document.getElementById('s-liability').textContent = fmt(tl);
+  document.getElementById('s-equity').textContent = fmt(eq);
+  drawBars();
+  const msg = document.getElementById('balance-msg');
+  if(ta===0 && rhs===0) { msg.textContent='数値を入力してください'; msg.className='balance-check neutral'; return; }
+  const diff = Math.abs(ta-rhs);
+  if(diff < 1) { msg.textContent=`貸借一致 ✓　総資産 = ${fmt(ta)}`; msg.className='balance-check balanced'; }
+  else { msg.textContent=`貸借不一致　差額: ${fmt(diff)}（資産 ${fmt(ta)} ／ 負債+純資産 ${fmt(rhs)}）`; msg.className='balance-check unbalanced'; }
+}
+Object.keys(DEFAULTS).forEach(sec => DEFAULTS[sec].forEach(name => addItem(sec, name, '')));
+</script>
+</body>
+</html>
