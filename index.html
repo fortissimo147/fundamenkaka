@@ -12,7 +12,7 @@ header h1 { font-size: 16px; font-weight: 500; }
 header p { font-size: 12px; color: #888; margin-top: 2px; }
 
 /* ===== 検索バー ===== */
-.search-section { background: #fff; border-bottom: 0.5px solid #e0ddd8; padding: 0.75rem 2rem; }
+.search-section { background: #fff; border: 0.5px solid #e0ddd8; border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 1.25rem; }
 .search-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .search-wrap { position: relative; flex: 0 0 300px; }
 #co-search { width: 100%; font-size: 13px; border: 0.5px solid #e0ddd8; border-radius: 8px; padding: 7px 12px; outline: none; background: #fff; color: #1a1a1a; }
@@ -130,18 +130,18 @@ header p { font-size: 12px; color: #888; margin-top: 2px; }
   <p>項目を自由に追加・削除して貸借対照表を可視化・分析できます</p>
 </header>
 
-<div class="search-section">
-  <div class="search-row">
-    <div class="search-wrap">
-      <input id="co-search" type="text" placeholder="銘柄コードまたは会社名を入力" autocomplete="off">
-      <div class="co-dropdown" id="co-dropdown"></div>
-    </div>
-    <div class="industry-tag" id="industry-tag"></div>
-  </div>
-  <div class="data-status" id="data-status">データ読み込み中...</div>
-</div>
-
 <div class="main">
+  <div class="search-section">
+    <div class="search-row">
+      <div class="search-wrap">
+        <input id="co-search" type="text" placeholder="銘柄コードまたは会社名を入力" autocomplete="off">
+        <div class="co-dropdown" id="co-dropdown"></div>
+      </div>
+      <div class="industry-tag" id="industry-tag"></div>
+    </div>
+    <div class="data-status" id="data-status">データ読み込み中...</div>
+  </div>
+
   <div class="summary-grid">
     <div class="metric"><div class="metric-label">総資産</div><div class="metric-value" id="s-asset">¥0</div></div>
     <div class="metric"><div class="metric-label">総負債</div><div class="metric-value" id="s-liability">¥0</div></div>
@@ -415,11 +415,15 @@ function calcIndustryAvg(s33c) {
   const avg  = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
 
   const eqArr  = nums(codes.map(c => parseFloat(bsRows[c]?.['自己資本比率'])));
-  const roeArr = nums(codes.map(c => parseFloat(plRows[c]?.['ROE'])));
+  // ROE・NPMは黒字企業（純利益>0）のみで平均
+  const roeArr = nums(codes.map(c => {
+    const v = parseFloat(plRows[c]?.['ROE']);
+    return (isFinite(v) && v > 0) ? v : NaN;
+  }));
   const npmArr = nums(codes.map(c => {
     const pl = plRows[c]; if (!pl) return NaN;
     const net = parseFloat(pl['純利益']), sales = parseFloat(pl['売上高']);
-    return (isFinite(net) && isFinite(sales) && sales > 0) ? net/sales*100 : NaN;
+    return (isFinite(net) && isFinite(sales) && net > 0 && sales > 0) ? net/sales*100 : NaN;
   }));
 
   return { equityRatio: avg(eqArr), roe: avg(roeArr), npm: avg(npmArr), n: codes.length };
@@ -463,12 +467,12 @@ function initSearch() {
 }
 
 // ===== 業界平均・合否表示 =====
-function setAvgBadge(badgeId, abId, userVal, avgVal) {
+function setAvgBadge(badgeId, abId, userVal, avgVal, note='') {
   const badge = document.getElementById(badgeId);
   const ab    = document.getElementById(abId);
   if (!badge) return;
   if (avgVal === null) { badge.textContent=''; if(ab) ab.textContent=''; return; }
-  badge.textContent = `業界平均 ${avgVal.toFixed(1)}%`;
+  badge.textContent = `業界平均 ${avgVal.toFixed(1)}%${note}`;
   if (!ab || userVal === null || !isFinite(userVal)) { if(ab) ab.textContent=''; return; }
   const diff = userVal - avgVal;
   const sign = diff >= 0 ? '+' : '';
@@ -635,8 +639,8 @@ function recalc() {
 
   // 業界平均
   setAvgBadge('avg-equity','ab-equity', equityRatio, industryAvg.equityRatio);
-  setAvgBadge('avg-npm',   'ab-npm',    npmVal,      industryAvg.npm);
-  setAvgBadge('avg-roe',   'ab-roe',    roeVal,      industryAvg.roe);
+  setAvgBadge('avg-npm',   'ab-npm',    npmVal,      industryAvg.npm,  '（黒字企業のみ）');
+  setAvgBadge('avg-roe',   'ab-roe',    roeVal,      industryAvg.roe,  '（黒字企業のみ）');
 }
 
 document.querySelectorAll('.pl-input').forEach(el => el.addEventListener('input', recalc));
