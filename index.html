@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -11,6 +10,23 @@ body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f8f7f4; co
 header { padding: 1.5rem 2rem; background: #fff; border-bottom: 0.5px solid #e0ddd8; }
 header h1 { font-size: 16px; font-weight: 500; }
 header p { font-size: 12px; color: #888; margin-top: 2px; }
+
+/* ===== 検索バー ===== */
+.search-section { background: #fff; border-bottom: 0.5px solid #e0ddd8; padding: 0.75rem 2rem; }
+.search-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.search-wrap { position: relative; flex: 0 0 300px; }
+#co-search { width: 100%; font-size: 13px; border: 0.5px solid #e0ddd8; border-radius: 8px; padding: 7px 12px; outline: none; background: #fff; color: #1a1a1a; }
+#co-search:focus { border-color: #888; }
+.co-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #fff; border: 0.5px solid #e0ddd8; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); z-index: 300; max-height: 220px; overflow-y: auto; display: none; }
+.co-item { padding: 8px 12px; font-size: 12px; cursor: pointer; border-bottom: 0.5px solid #f0ede8; display: flex; align-items: center; gap: 6px; }
+.co-item:hover { background: #f8f7f4; }
+.co-item:last-child { border-bottom: none; }
+.co-code { color: #888; font-size: 11px; min-width: 36px; flex-shrink: 0; }
+.co-sector-tag { color: #999; font-size: 10px; margin-left: auto; white-space: nowrap; }
+.industry-tag { font-size: 12px; color: #27500A; background: #EAF3DE; border-radius: 6px; padding: 5px 10px; white-space: nowrap; display: none; }
+.data-status { font-size: 10px; color: #bbb; margin-top: 4px; }
+
+/* ===== メイン ===== */
 .main { max-width: 860px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
 .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 1.25rem; }
 .metric { background: #fff; border: 0.5px solid #e0ddd8; border-radius: 10px; padding: 0.75rem 1rem; }
@@ -52,20 +68,31 @@ header p { font-size: 12px; color: #888; margin-top: 2px; }
 .pl-label { font-size: 11px; color: #888; }
 .pl-input { font-size: 13px; border: 0.5px solid #e0ddd8; border-radius: 6px; padding: 6px 10px; background: #fff; color: #1a1a1a; text-align: right; width: 100%; outline: none; }
 .pl-input:focus { border-color: #888; }
+
+/* ===== 財務分析 ===== */
 .analysis-area { background: #fff; border: 0.5px solid #e0ddd8; border-radius: 10px; padding: 1rem 1.25rem; }
 .analysis-title { font-size: 13px; font-weight: 500; margin-bottom: 14px; }
 .analysis-group { margin-bottom: 16px; }
 .analysis-group-title { font-size: 11px; font-weight: 500; color: #888; letter-spacing: 0.05em; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 0.5px solid #e0ddd8; }
 .ratio-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-.ratio-card { background: #f8f7f4; border-radius: 8px; padding: 10px 12px; }
-.ratio-name { font-size: 11px; color: #666; margin-bottom: 2px; }
+.ratio-card { background: #f8f7f4; border-radius: 8px; padding: 10px 12px; position: relative; }
+.card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2px; }
+.ratio-name { font-size: 11px; color: #666; }
+.avg-badge { font-size: 10px; color: #aaa; white-space: nowrap; }
+.pf-badge { font-size: 15px; line-height: 1; }
+.pf-pass { color: #27500A; }
+.pf-fail { color: #C0392B; }
 .ratio-formula { font-size: 10px; color: #aaa; margin-bottom: 6px; }
 .ratio-value { font-size: 20px; font-weight: 500; color: #1a1a1a; }
 .ratio-unit { font-size: 11px; color: #888; margin-left: 2px; }
 .ratio-bar-bg { height: 4px; background: #e0ddd8; border-radius: 2px; margin-top: 8px; overflow: hidden; }
 .ratio-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
 .bs-source { font-size: 10px; color: #aaa; margin-top: 4px; }
-.ratio-card { position: relative; }
+.ab-line { font-size: 10px; margin-top: 5px; min-height: 13px; }
+.ab-above { color: #27500A; }
+.ab-below { color: #C0392B; }
+
+/* ===== ツールチップ ===== */
 .ratio-card[data-tooltip]:hover::after {
   content: attr(data-tooltip);
   position: absolute;
@@ -102,6 +129,18 @@ header p { font-size: 12px; color: #888; margin-top: 2px; }
   <h1>バランスシート ビジュアライザー</h1>
   <p>項目を自由に追加・削除して貸借対照表を可視化・分析できます</p>
 </header>
+
+<div class="search-section">
+  <div class="search-row">
+    <div class="search-wrap">
+      <input id="co-search" type="text" placeholder="銘柄コードまたは会社名を入力" autocomplete="off">
+      <div class="co-dropdown" id="co-dropdown"></div>
+    </div>
+    <div class="industry-tag" id="industry-tag"></div>
+  </div>
+  <div class="data-status" id="data-status">データ読み込み中...</div>
+</div>
+
 <div class="main">
   <div class="summary-grid">
     <div class="metric"><div class="metric-label">総資産</div><div class="metric-value" id="s-asset">¥0</div></div>
@@ -173,35 +212,51 @@ header p { font-size: 12px; color: #888; margin-top: 2px; }
       <div class="analysis-group-title">安全性</div>
       <div class="ratio-grid">
         <div class="ratio-card" data-tooltip="国内では流動比率が120％以上であれば、一般的には短期的な資金繰りには困らないとされ、100％を下回っていると支払い能力に不安があるとされる">
-          <div class="ratio-name">流動比率</div>
+          <div class="card-top">
+            <div class="ratio-name">流動比率</div>
+            <div class="pf-badge" id="pf-current"></div>
+          </div>
           <div class="ratio-formula">流動資産 ÷ 流動負債</div>
           <div><span class="ratio-value" id="r-current">—</span><span class="ratio-unit" id="r-current-u"></span></div>
           <div class="ratio-bar-bg"><div class="ratio-bar-fill" id="b-current" style="background:#378ADD;width:0%"></div></div>
           <div class="bs-source">BSより自動取得</div>
         </div>
         <div class="ratio-card" data-tooltip="一般的に当座比率100％以上が望ましいとされる。同じく企業の短期的な負債への支払い能力をみる指標として流動比率があるが、流動資産には不良在庫（棚卸資産）が含まれていることがあるため、当座比率のほうが、より厳密に企業の財務体質の安全性を判断することができる。">
-          <div class="ratio-name">当座比率</div>
+          <div class="card-top">
+            <div class="ratio-name">当座比率</div>
+            <div class="pf-badge" id="pf-quick"></div>
+          </div>
           <div class="ratio-formula">（現金+売掛金） ÷ 流動負債</div>
           <div><span class="ratio-value" id="r-quick">—</span><span class="ratio-unit" id="r-quick-u"></span></div>
           <div class="ratio-bar-bg"><div class="ratio-bar-fill" id="b-quick" style="background:#5B9FE8;width:0%"></div></div>
           <div class="bs-source">BSの「現金・預金」「売掛金」の合計を使用</div>
         </div>
         <div class="ratio-card" data-tooltip="30%が合格ライン。50%以上は優等生。20%以下は財務的に危険な状態とみなされる。（金融業を除く）">
-          <div class="ratio-name">自己資本比率</div>
+          <div class="card-top">
+            <div class="ratio-name">自己資本比率</div>
+            <div class="avg-badge" id="avg-equity"></div>
+          </div>
           <div class="ratio-formula">純資産 ÷ 総資産</div>
           <div><span class="ratio-value" id="r-equity">—</span><span class="ratio-unit" id="r-equity-u"></span></div>
           <div class="ratio-bar-bg"><div class="ratio-bar-fill" id="b-equity" style="background:#639922;width:0%"></div></div>
           <div class="bs-source">BSより自動取得</div>
+          <div class="ab-line" id="ab-equity"></div>
         </div>
         <div class="ratio-card" data-tooltip="いかに起債せず固定資産を投資できているかを見る指標。低いほうが望ましい。">
-          <div class="ratio-name">固定比率</div>
+          <div class="card-top">
+            <div class="ratio-name">固定比率</div>
+            <div></div>
+          </div>
           <div class="ratio-formula">固定資産 ÷ 純資産</div>
           <div><span class="ratio-value" id="r-fixed">—</span><span class="ratio-unit" id="r-fixed-u"></span></div>
           <div class="ratio-bar-bg"><div class="ratio-bar-fill" id="b-fixed" style="background:#D85A30;width:0%"></div></div>
           <div class="bs-source">BSより自動取得</div>
         </div>
         <div class="ratio-card" style="grid-column:span 2;" data-tooltip="いかに起債せず固定資産を投資できているかを見る指標。低いほうが望ましい。（固定比率より使われる指標）">
-          <div class="ratio-name">固定長期適合率</div>
+          <div class="card-top">
+            <div class="ratio-name">固定長期適合率</div>
+            <div></div>
+          </div>
           <div class="ratio-formula">固定資産 ÷ （純資産 + 固定負債）</div>
           <div><span class="ratio-value" id="r-ltfit">—</span><span class="ratio-unit" id="r-ltfit-u"></span></div>
           <div class="ratio-bar-bg"><div class="ratio-bar-fill" id="b-ltfit" style="background:#993C1D;width:0%"></div></div>
@@ -214,44 +269,52 @@ header p { font-size: 12px; color: #888; margin-top: 2px; }
       <div class="analysis-group-title">効率性</div>
       <div class="ratio-grid">
         <div class="ratio-card">
-          <div class="ratio-name">総資産回転率</div>
+          <div class="card-top"><div class="ratio-name">総資産回転率</div><div></div></div>
           <div class="ratio-formula">売上高 ÷ 総資産</div>
           <div><span class="ratio-value" id="r-aturn">—</span><span class="ratio-unit" id="r-aturn-u"></span></div>
           <div class="ratio-bar-bg"><div class="ratio-bar-fill" id="b-aturn" style="background:#378ADD;width:0%"></div></div>
         </div>
         <div class="ratio-card">
-          <div class="ratio-name">有形固定資産回転率</div>
+          <div class="card-top"><div class="ratio-name">有形固定資産回転率</div><div></div></div>
           <div class="ratio-formula">売上高 ÷ 有形固定資産</div>
           <div><span class="ratio-value" id="r-tturn">—</span><span class="ratio-unit" id="r-tturn-u"></span></div>
           <div class="ratio-bar-bg"><div class="ratio-bar-fill" id="b-tturn" style="background:#185FA5;width:0%"></div></div>
           <div class="bs-source">BSの「有形固定資産」を使用</div>
         </div>
         <div class="ratio-card" data-tooltip="売れ行きが良いのかの指標。高い方が望ましい。モノや業界によってかなり異なるので同業他社と比較して目安を算出。">
-          <div class="ratio-name">棚卸資産回転率</div>
+          <div class="card-top"><div class="ratio-name">棚卸資産回転率</div><div></div></div>
           <div class="ratio-formula">売上原価 ÷ 棚卸資産</div>
           <div><span class="ratio-value" id="r-iturn">—</span><span class="ratio-unit" id="r-iturn-u"></span></div>
           <div class="ratio-bar-bg"><div class="ratio-bar-fill" id="b-iturn" style="background:#7AB82A;width:0%"></div></div>
           <div class="bs-source">BSの「棚卸資産」を使用</div>
         </div>
         <div class="ratio-card">
-          <div class="ratio-name">運転資本</div>
+          <div class="card-top"><div class="ratio-name">運転資本</div><div></div></div>
           <div class="ratio-formula">売上債権 + 棚卸資産 − 仕入債務</div>
           <div><span class="ratio-value" id="r-wc">—</span><span class="ratio-unit" id="r-wc-u"></span></div>
           <div class="ratio-bar-bg"><div class="ratio-bar-fill" id="b-wc" style="background:#97C459;width:0%"></div></div>
           <div class="bs-source">BSの「売掛金」「棚卸資産」「買掛金」を使用</div>
         </div>
         <div class="ratio-card">
-          <div class="ratio-name">売上高純利益率</div>
+          <div class="card-top">
+            <div class="ratio-name">売上高純利益率</div>
+            <div class="avg-badge" id="avg-npm"></div>
+          </div>
           <div class="ratio-formula">当期純利益 ÷ 売上高</div>
           <div><span class="ratio-value" id="r-npm">—</span><span class="ratio-unit" id="r-npm-u"></span></div>
           <div class="ratio-bar-bg"><div class="ratio-bar-fill" id="b-npm" style="background:#639922;width:0%"></div></div>
+          <div class="ab-line" id="ab-npm"></div>
         </div>
         <div class="ratio-card">
-          <div class="ratio-name">ROE</div>
+          <div class="card-top">
+            <div class="ratio-name">ROE</div>
+            <div class="avg-badge" id="avg-roe"></div>
+          </div>
           <div class="ratio-formula">当期純利益 ÷ 純資産</div>
           <div><span class="ratio-value" id="r-roe">—</span><span class="ratio-unit" id="r-roe-u"></span></div>
           <div class="ratio-bar-bg"><div class="ratio-bar-fill" id="b-roe" style="background:#B24522;width:0%"></div></div>
           <div class="bs-source">BSより自動取得</div>
+          <div class="ab-line" id="ab-roe"></div>
         </div>
       </div>
     </div>
@@ -265,14 +328,165 @@ const fmt = v => {
   if(v>=1e4) return `¥${Math.round(v/1e4)}万`;
   return `¥${Math.round(v).toLocaleString()}`;
 };
-const SECTION_COLORS = {
-  'asset-current':'#378ADD','asset-fixed':'#185FA5',
-  'liability-current':'#D85A30','liability-fixed':'#993C1D','equity':'#639922'
-};
-const SECTION_LABELS = {
-  'asset-current':'流動資産','asset-fixed':'固定資産',
-  'liability-current':'流動負債','liability-fixed':'固定負債','equity':'純資産'
-};
+
+// ===== データ管理 =====
+let companies = [];
+let plRows = {}, bsRows = {};
+let industryAvg = { equityRatio: null, roe: null, npm: null };
+let selectedSector33 = null;
+
+async function loadData() {
+  const status = document.getElementById('data-status');
+  try {
+    const cRes = await fetch('data/companies.csv');
+    if (!cRes.ok) throw new Error();
+    parseCompanies(await cRes.text());
+
+    let latestSnap = '';
+    try {
+      const mRes = await fetch('data/manifest.json');
+      if (mRes.ok) { const m = await mRes.json(); latestSnap = m.latest || ''; }
+    } catch(e) {}
+
+    if (!latestSnap) {
+      const now = new Date();
+      for (let i = 0; i <= 3; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const s = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        try { const r = await fetch(`data/${s}/fy-profit-and-loss.csv`); if (r.ok) { latestSnap = s; break; } } catch(e) {}
+      }
+    }
+
+    if (latestSnap) {
+      const [plRes, bsRes] = await Promise.all([
+        fetch(`data/${latestSnap}/fy-profit-and-loss.csv`),
+        fetch(`data/${latestSnap}/fy-balance-sheet.csv`)
+      ]);
+      if (plRes.ok) plRows = parseIRBankCSV(await plRes.text());
+      if (bsRes.ok) bsRows = parseIRBankCSV(await bsRes.text());
+      status.textContent = `IRBankデータ: ${latestSnap}　銘柄数: ${Object.keys(plRows).length}社`;
+    } else {
+      status.textContent = '会社マスタ読込済 / IRBankデータ未取得';
+    }
+  } catch(e) {
+    status.textContent = '会社マスタ未取得（Actionsでデータを取得してください）';
+  }
+  initSearch();
+}
+
+function parseCompanies(text) {
+  const lines = text.replace(/^\uFEFF/, '').split('\n');
+  const header = lines[0].split(',').map(h => h.trim());
+  const i = { code: header.indexOf('コード'), name: header.indexOf('銘柄名'), market: header.indexOf('市場・商品区分'), s33c: header.indexOf('33業種コード'), s33n: header.indexOf('33業種区分') };
+  companies = [];
+  for (let r = 1; r < lines.length; r++) {
+    const c = lines[r].split(',');
+    const code = c[i.code]?.trim();
+    if (!code) continue;
+    const mkt = c[i.market]?.trim() || '';
+    if (mkt === 'ETF・ETN' || mkt.includes('REIT') || mkt.includes('インフラ')) continue;
+    companies.push({ code, name: c[i.name]?.trim()||'', s33c: c[i.s33c]?.trim()||'', s33n: c[i.s33n]?.trim()||'' });
+  }
+}
+
+function parseIRBankCSV(text) {
+  const lines = text.replace(/^\uFEFF/, '').split('\n');
+  let hi = -1;
+  for (let i = 0; i < Math.min(lines.length, 8); i++) {
+    if (lines[i].startsWith('コード')) { hi = i; break; }
+  }
+  if (hi < 0) return {};
+  const header = lines[hi].split(',').map(h => h.trim());
+  const result = {};
+  for (let i = hi + 1; i < lines.length; i++) {
+    const cols = lines[i].split(',');
+    const code = cols[0]?.trim();
+    if (!code) continue;
+    const row = {};
+    header.forEach((h, j) => { row[h] = cols[j]?.trim() || ''; });
+    result[code] = row;
+  }
+  return result;
+}
+
+function calcIndustryAvg(s33c) {
+  const codes = companies.filter(c => c.s33c === s33c).map(c => c.code);
+  const nums = arr => arr.filter(v => isFinite(v) && !isNaN(v));
+  const avg  = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
+
+  const eqArr  = nums(codes.map(c => parseFloat(bsRows[c]?.['自己資本比率'])));
+  const roeArr = nums(codes.map(c => parseFloat(plRows[c]?.['ROE'])));
+  const npmArr = nums(codes.map(c => {
+    const pl = plRows[c]; if (!pl) return NaN;
+    const net = parseFloat(pl['純利益']), sales = parseFloat(pl['売上高']);
+    return (isFinite(net) && isFinite(sales) && sales > 0) ? net/sales*100 : NaN;
+  }));
+
+  return { equityRatio: avg(eqArr), roe: avg(roeArr), npm: avg(npmArr), n: codes.length };
+}
+
+// ===== 検索 =====
+function initSearch() {
+  const input = document.getElementById('co-search');
+  const dd    = document.getElementById('co-dropdown');
+  const tag   = document.getElementById('industry-tag');
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim();
+    if (!q) { dd.style.display='none'; return; }
+    const results = companies.filter(c => c.code.startsWith(q) || c.name.includes(q)).slice(0, 25);
+    if (!results.length) { dd.style.display='none'; return; }
+    dd.innerHTML = results.map(c =>
+      `<div class="co-item" data-code="${c.code}">
+        <span class="co-code">${c.code}</span>
+        <span>${c.name}</span>
+        <span class="co-sector-tag">${c.s33n !== '-' ? c.s33n : ''}</span>
+      </div>`
+    ).join('');
+    dd.style.display = 'block';
+    dd.querySelectorAll('.co-item').forEach(el => {
+      el.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const c = companies.find(x => x.code === el.dataset.code);
+        if (!c) return;
+        input.value = `${c.code}　${c.name}`;
+        dd.style.display = 'none';
+        selectedSector33 = c.s33c;
+        tag.textContent = (c.s33n && c.s33n !== '-') ? c.s33n : '';
+        tag.style.display = tag.textContent ? 'inline-block' : 'none';
+        industryAvg = calcIndustryAvg(c.s33c);
+        recalc();
+      });
+    });
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('.search-wrap')) dd.style.display='none'; });
+}
+
+// ===== 業界平均・合否表示 =====
+function setAvgBadge(badgeId, abId, userVal, avgVal) {
+  const badge = document.getElementById(badgeId);
+  const ab    = document.getElementById(abId);
+  if (!badge) return;
+  if (avgVal === null) { badge.textContent=''; if(ab) ab.textContent=''; return; }
+  badge.textContent = `業界平均 ${avgVal.toFixed(1)}%`;
+  if (!ab || userVal === null || !isFinite(userVal)) { if(ab) ab.textContent=''; return; }
+  const diff = userVal - avgVal;
+  const sign = diff >= 0 ? '+' : '';
+  ab.textContent = (diff >= 0 ? '▲' : '▼') + ` 業界平均より ${sign}${diff.toFixed(1)}%pt`;
+  ab.className = 'ab-line ' + (diff >= 0 ? 'ab-above' : 'ab-below');
+}
+
+function setPFBadge(id, value, threshold) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (value === null || !isFinite(value)) { el.textContent=''; el.className='pf-badge'; return; }
+  if (value >= threshold) { el.textContent='○'; el.className='pf-badge pf-pass'; }
+  else                    { el.textContent='✕'; el.className='pf-badge pf-fail'; }
+}
+
+// ===== BS操作 =====
+const SECTION_COLORS = { 'asset-current':'#378ADD','asset-fixed':'#185FA5','liability-current':'#D85A30','liability-fixed':'#993C1D','equity':'#639922' };
+const SECTION_LABELS = { 'asset-current':'流動資産','asset-fixed':'固定資産','liability-current':'流動負債','liability-fixed':'固定負債','equity':'純資産' };
 const DEFAULT_ITEM_COLORS = {
   'asset-current':['#378ADD','#5B9FE8','#85B7EB','#B5D4F4'],
   'asset-fixed':['#185FA5','#0C447C','#1A6FBB','#2480CC'],
@@ -311,62 +525,49 @@ function addItem(section, name='', value='') {
 }
 
 function sumSection(section) {
-  return Array.from(document.querySelectorAll(`#${section}-items .item-val`))
-    .reduce((a,i) => a + (parseFloat(i.value)||0), 0);
+  return Array.from(document.querySelectorAll(`#${section}-items .item-val`)).reduce((a,i) => a+(parseFloat(i.value)||0), 0);
 }
 
-// BSから項目名でマッチして合計を取得
 function sumByKeywords(section, keywords) {
   let total = 0;
   document.querySelectorAll(`#${section}-items .item-row`).forEach(row => {
     const name = row.querySelector('.item-name').value;
-    const val = parseFloat(row.querySelector('.item-val').value)||0;
-    if(keywords.some(k => name.includes(k))) total += val;
+    const val  = parseFloat(row.querySelector('.item-val').value)||0;
+    if (keywords.some(k => name.includes(k))) total += val;
   });
   return total;
 }
 
 function makeSeg(val, max, H, color, label) {
-  if(val <= 0) return null;
-  const h = Math.round(val / max * H);
-  if(h <= 0) return null;
+  if(val<=0) return null;
+  const h = Math.round(val/max*H);
+  if(h<=0) return null;
   const seg = document.createElement('div');
   seg.className = 'bar-seg';
   seg.style.cssText = `height:${h}px;background:${color};`;
   seg.title = `${label}: ${fmt(val)}`;
-  if(h >= 36) seg.innerHTML = `<span class="seg-name">${label}</span><span class="seg-val">${fmt(val)}</span>`;
-  else if(h >= 18) seg.innerHTML = `<span class="seg-val">${fmt(val)}</span>`;
+  if(h>=36) seg.innerHTML = `<span class="seg-name">${label}</span><span class="seg-val">${fmt(val)}</span>`;
+  else if(h>=18) seg.innerHTML = `<span class="seg-val">${fmt(val)}</span>`;
   return seg;
 }
 
 function drawBars(ca, fa, cl, fl, eq) {
-  const max = Math.max(ca+fa, cl+fl+eq, 1);
-  const H = 200;
-  const barAsset = document.getElementById('bar-asset');
-  barAsset.innerHTML = '';
+  const max = Math.max(ca+fa, cl+fl+eq, 1), H = 200;
+  const barA = document.getElementById('bar-asset'); barA.innerHTML='';
   [makeSeg(ca,max,H,SECTION_COLORS['asset-current'],SECTION_LABELS['asset-current']),
-   makeSeg(fa,max,H,SECTION_COLORS['asset-fixed'],SECTION_LABELS['asset-fixed'])]
-    .forEach(s => s && barAsset.appendChild(s));
-  const barRhs = document.getElementById('bar-rhs');
-  barRhs.innerHTML = '';
+   makeSeg(fa,max,H,SECTION_COLORS['asset-fixed'],SECTION_LABELS['asset-fixed'])].forEach(s=>s&&barA.appendChild(s));
+  const barR = document.getElementById('bar-rhs'); barR.innerHTML='';
   [makeSeg(cl,max,H,SECTION_COLORS['liability-current'],SECTION_LABELS['liability-current']),
    makeSeg(fl,max,H,SECTION_COLORS['liability-fixed'],SECTION_LABELS['liability-fixed']),
-   makeSeg(eq,max,H,SECTION_COLORS['equity'],SECTION_LABELS['equity'])]
-    .forEach(s => s && barRhs.appendChild(s));
+   makeSeg(eq,max,H,SECTION_COLORS['equity'],SECTION_LABELS['equity'])].forEach(s=>s&&barR.appendChild(s));
 }
 
 function setRatio(id, barId, value, unit, isRate=true) {
-  const el = document.getElementById(id);
-  const bar = document.getElementById(barId);
-  const uEl = document.getElementById(id+'-u');
-  if(value === null || !isFinite(value)) {
-    el.textContent = '—'; if(uEl) uEl.textContent=''; if(bar) bar.style.width='0%'; return;
-  }
-  el.textContent = Math.abs(value) >= 100 ? value.toFixed(1) : value.toFixed(2);
+  const el=document.getElementById(id), bar=document.getElementById(barId), uEl=document.getElementById(id+'-u');
+  if(value===null||!isFinite(value)){ el.textContent='—'; if(uEl)uEl.textContent=''; if(bar)bar.style.width='0%'; return; }
+  el.textContent = Math.abs(value)>=100 ? value.toFixed(1) : value.toFixed(2);
   if(uEl) uEl.textContent = unit;
-  if(bar) bar.style.width = isRate
-    ? Math.min(Math.abs(value), 100)+'%'
-    : Math.min(Math.abs(value) * 20, 100)+'%';
+  if(bar) bar.style.width = isRate ? Math.min(Math.abs(value),100)+'%' : Math.min(Math.abs(value)*20,100)+'%';
 }
 
 function recalc() {
@@ -374,67 +575,73 @@ function recalc() {
   const cl=sumSection('liability-current'), fl=sumSection('liability-fixed'), eq=sumSection('equity');
   const ta=ca+fa, tl=cl+fl, rhs=tl+eq;
 
-  document.getElementById('sub-asset-current').textContent = fmt(ca);
-  document.getElementById('sub-asset-fixed').textContent = fmt(fa);
-  document.getElementById('sub-liability-current').textContent = fmt(cl);
-  document.getElementById('sub-liability-fixed').textContent = fmt(fl);
-  document.getElementById('sub-equity').textContent = fmt(eq);
-  document.getElementById('s-asset').textContent = fmt(ta);
-  document.getElementById('s-liability').textContent = fmt(tl);
-  document.getElementById('s-equity').textContent = fmt(eq);
+  document.getElementById('sub-asset-current').textContent=fmt(ca);
+  document.getElementById('sub-asset-fixed').textContent=fmt(fa);
+  document.getElementById('sub-liability-current').textContent=fmt(cl);
+  document.getElementById('sub-liability-fixed').textContent=fmt(fl);
+  document.getElementById('sub-equity').textContent=fmt(eq);
+  document.getElementById('s-asset').textContent=fmt(ta);
+  document.getElementById('s-liability').textContent=fmt(tl);
+  document.getElementById('s-equity').textContent=fmt(eq);
 
-  drawBars(ca, fa, cl, fl, eq);
+  drawBars(ca,fa,cl,fl,eq);
 
-  const msg = document.getElementById('balance-msg');
-  if(ta===0 && rhs===0) { msg.textContent='数値を入力してください'; msg.className='balance-check neutral'; }
+  const msg=document.getElementById('balance-msg');
+  if(ta===0&&rhs===0){ msg.textContent='数値を入力してください'; msg.className='balance-check neutral'; }
   else {
-    const diff = Math.abs(ta-rhs);
-    if(diff < 1) { msg.textContent=`貸借一致 ✓　総資産 = ${fmt(ta)}`; msg.className='balance-check balanced'; }
-    else { msg.textContent=`貸借不一致　差額: ${fmt(diff)}（資産 ${fmt(ta)} ／ 負債+純資産 ${fmt(rhs)}）`; msg.className='balance-check unbalanced'; }
+    const diff=Math.abs(ta-rhs);
+    if(diff<1){ msg.textContent=`貸借一致 ✓　総資産 = ${fmt(ta)}`; msg.className='balance-check balanced'; }
+    else{ msg.textContent=`貸借不一致　差額: ${fmt(diff)}（資産 ${fmt(ta)} ／ 負債+純資産 ${fmt(rhs)}）`; msg.className='balance-check unbalanced'; }
   }
 
-  // PLの入力値
-  const sales = parseFloat(document.getElementById('pl-sales').value)||0;
-  const cogs  = parseFloat(document.getElementById('pl-cogs').value)||0;
-  const net   = parseFloat(document.getElementById('pl-net').value)||0;
+  const sales=parseFloat(document.getElementById('pl-sales').value)||0;
+  const cogs =parseFloat(document.getElementById('pl-cogs').value)||0;
+  const net  =parseFloat(document.getElementById('pl-net').value)||0;
 
-  // BSから自動取得
-  const quickAsset  = sumByKeywords('asset-current', ['現金','預金','売掛金','有価証券']);
-  const tangible    = sumByKeywords('asset-fixed',   ['有形固定']);
-  const inventory   = sumByKeywords('asset-current', ['棚卸']);
-  const receivable  = sumByKeywords('asset-current', ['売掛']);
-  const payable     = sumByKeywords('liability-current', ['買掛']);
+  const quickAsset = sumByKeywords('asset-current',['現金','預金','売掛金','有価証券']);
+  const tangible   = sumByKeywords('asset-fixed',  ['有形固定']);
+  const inventory  = sumByKeywords('asset-current',['棚卸']);
+  const receivable = sumByKeywords('asset-current',['売掛']);
+  const payable    = sumByKeywords('liability-current',['買掛']);
 
-  // 安全性
-  setRatio('r-current', 'b-current', cl>0 ? ca/cl*100 : null, '%');
-  setRatio('r-quick',   'b-quick',   cl>0 && quickAsset>0 ? quickAsset/cl*100 : null, '%');
-  setRatio('r-equity',  'b-equity',  ta>0 ? eq/ta*100 : null, '%');
-  setRatio('r-fixed',   'b-fixed',   eq>0 ? fa/eq*100 : null, '%');
-  setRatio('r-ltfit',   'b-ltfit',   (eq+fl)>0 ? fa/(eq+fl)*100 : null, '%');
+  const currentRatio = cl>0 ? ca/cl*100 : null;
+  const quickRatio   = (cl>0&&quickAsset>0) ? quickAsset/cl*100 : null;
+  const equityRatio  = ta>0 ? eq/ta*100 : null;
+  const npmVal       = (sales>0&&net!==0) ? net/sales*100 : null;
+  const roeVal       = (eq>0&&net!==0) ? net/eq*100 : null;
 
-  // 効率性
-  setRatio('r-aturn', 'b-aturn', ta>0 && sales>0 ? sales/ta : null, '回', false);
-  setRatio('r-tturn', 'b-tturn', tangible>0 && sales>0 ? sales/tangible : null, '回', false);
-  setRatio('r-iturn', 'b-iturn', inventory>0 && cogs>0 ? cogs/inventory : null, '回', false);
-  setRatio('r-npm',   'b-npm',   sales>0 && net!==0 ? net/sales*100 : null, '%');
-  setRatio('r-roe',   'b-roe',   eq>0 && net!==0 ? net/eq*100 : null, '%');
+  setRatio('r-current','b-current', currentRatio,'%');
+  setRatio('r-quick',  'b-quick',   quickRatio,  '%');
+  setRatio('r-equity', 'b-equity',  equityRatio, '%');
+  setRatio('r-fixed',  'b-fixed',   eq>0?fa/eq*100:null,'%');
+  setRatio('r-ltfit',  'b-ltfit',   (eq+fl)>0?fa/(eq+fl)*100:null,'%');
+  setRatio('r-aturn',  'b-aturn',   ta>0&&sales>0?sales/ta:null,'回',false);
+  setRatio('r-tturn',  'b-tturn',   tangible>0&&sales>0?sales/tangible:null,'回',false);
+  setRatio('r-iturn',  'b-iturn',   inventory>0&&cogs>0?cogs/inventory:null,'回',false);
+  setRatio('r-npm',    'b-npm',     npmVal,'%');
+  setRatio('r-roe',    'b-roe',     roeVal,'%');
 
-  // 運転資本（金額なので別処理）
-  const wcEl = document.getElementById('r-wc');
-  const wcU  = document.getElementById('r-wc-u');
-  const wcBar= document.getElementById('b-wc');
-  if(receivable>0 || inventory>0 || payable>0) {
-    const wc = receivable + inventory - payable;
-    wcEl.textContent = fmt(Math.abs(wc)).replace('¥','');
-    if(wcU) wcU.textContent = wc>=0 ? '円' : '円（負）';
-    if(wcBar) wcBar.style.width = ta>0 ? Math.min(Math.abs(wc)/ta*100,100)+'%' : '0%';
-  } else {
-    wcEl.textContent='—'; if(wcU) wcU.textContent=''; if(wcBar) wcBar.style.width='0%';
-  }
+  const wcEl=document.getElementById('r-wc'), wcU=document.getElementById('r-wc-u'), wcBar=document.getElementById('b-wc');
+  if(receivable>0||inventory>0||payable>0){
+    const wc=receivable+inventory-payable;
+    wcEl.textContent=fmt(Math.abs(wc)).replace('¥','');
+    if(wcU) wcU.textContent=wc>=0?'円':'円（負）';
+    if(wcBar) wcBar.style.width=ta>0?Math.min(Math.abs(wc)/ta*100,100)+'%':'0%';
+  } else { wcEl.textContent='—'; if(wcU)wcU.textContent=''; if(wcBar)wcBar.style.width='0%'; }
+
+  // ○/✕
+  setPFBadge('pf-current', currentRatio, 120);
+  setPFBadge('pf-quick',   quickRatio,   100);
+
+  // 業界平均
+  setAvgBadge('avg-equity','ab-equity', equityRatio, industryAvg.equityRatio);
+  setAvgBadge('avg-npm',   'ab-npm',    npmVal,      industryAvg.npm);
+  setAvgBadge('avg-roe',   'ab-roe',    roeVal,      industryAvg.roe);
 }
 
 document.querySelectorAll('.pl-input').forEach(el => el.addEventListener('input', recalc));
 Object.keys(DEFAULTS).forEach(sec => DEFAULTS[sec].forEach(name => addItem(sec, name, '')));
+loadData();
 </script>
 </body>
 </html>
