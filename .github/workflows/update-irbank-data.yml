@@ -42,6 +42,19 @@ jobs:
           df.to_csv('data/companies.csv', index=False, encoding='utf-8-sig')
           EOF
 
+      - name: マニフェスト更新
+        run: |
+          python3 - <<'EOF'
+          import json, os
+          snapshots = sorted([
+            d for d in os.listdir('data')
+            if os.path.isdir(f'data/{d}') and '-' in d and d[:4].isdigit()
+          ])
+          manifest = {"latest": snapshots[-1] if snapshots else "", "snapshots": snapshots}
+          with open('data/manifest.json', 'w') as f:
+            json.dump(manifest, f, ensure_ascii=False)
+          EOF
+
       - name: コミット・プッシュ
         run: |
           DATE=$(date +'%Y-%m')
