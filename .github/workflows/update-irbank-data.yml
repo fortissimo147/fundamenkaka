@@ -17,20 +17,22 @@ jobs:
 
       - name: CSVダウンロード
         run: |
-          mkdir -p data
+          DATE=$(date +'%Y-%m')
+          mkdir -p data/$DATE
           curl -f -L \
             -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-            -o data/fy-balance-sheet.csv \
+            -o data/$DATE/fy-balance-sheet.csv \
             https://f.irbank.net/files/0000/fy-balance-sheet.csv
           curl -f -L \
             -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-            -o data/fy-profit-and-loss.csv \
+            -o data/$DATE/fy-profit-and-loss.csv \
             https://f.irbank.net/files/0000/fy-profit-and-loss.csv
 
       - name: コミット・プッシュ
         run: |
+          DATE=$(date +'%Y-%m')
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/
+          git add data/$DATE/
           git diff --staged --quiet || git commit -m "データ更新: $(date +'%Y年%m月')"
           git push
