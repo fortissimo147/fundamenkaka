@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -64,6 +65,36 @@ header p { font-size: 12px; color: #888; margin-top: 2px; }
 .ratio-bar-bg { height: 4px; background: #e0ddd8; border-radius: 2px; margin-top: 8px; overflow: hidden; }
 .ratio-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
 .bs-source { font-size: 10px; color: #aaa; margin-top: 4px; }
+.ratio-card { position: relative; }
+.ratio-card[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.65;
+  padding: 8px 11px;
+  border-radius: 7px;
+  width: 260px;
+  white-space: normal;
+  z-index: 200;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+}
+.ratio-card[data-tooltip]:hover::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #1a1a1a;
+  z-index: 200;
+  pointer-events: none;
+}
 </style>
 </head>
 <body>
@@ -141,35 +172,35 @@ header p { font-size: 12px; color: #888; margin-top: 2px; }
     <div class="analysis-group">
       <div class="analysis-group-title">安全性</div>
       <div class="ratio-grid">
-        <div class="ratio-card">
+        <div class="ratio-card" data-tooltip="国内では流動比率が120％以上であれば、一般的には短期的な資金繰りには困らないとされ、100％を下回っていると支払い能力に不安があるとされる">
           <div class="ratio-name">流動比率</div>
           <div class="ratio-formula">流動資産 ÷ 流動負債</div>
           <div><span class="ratio-value" id="r-current">—</span><span class="ratio-unit" id="r-current-u"></span></div>
           <div class="ratio-bar-bg"><div class="ratio-bar-fill" id="b-current" style="background:#378ADD;width:0%"></div></div>
           <div class="bs-source">BSより自動取得</div>
         </div>
-        <div class="ratio-card">
+        <div class="ratio-card" data-tooltip="一般的に当座比率100％以上が望ましいとされる。同じく企業の短期的な負債への支払い能力をみる指標として流動比率があるが、流動資産には不良在庫（棚卸資産）が含まれていることがあるため、当座比率のほうが、より厳密に企業の財務体質の安全性を判断することができる。">
           <div class="ratio-name">当座比率</div>
           <div class="ratio-formula">（現金+売掛金） ÷ 流動負債</div>
           <div><span class="ratio-value" id="r-quick">—</span><span class="ratio-unit" id="r-quick-u"></span></div>
           <div class="ratio-bar-bg"><div class="ratio-bar-fill" id="b-quick" style="background:#5B9FE8;width:0%"></div></div>
           <div class="bs-source">BSの「現金・預金」「売掛金」の合計を使用</div>
         </div>
-        <div class="ratio-card">
+        <div class="ratio-card" data-tooltip="30%が合格ライン。50%以上は優等生。20%以下は財務的に危険な状態とみなされる。（金融業を除く）">
           <div class="ratio-name">自己資本比率</div>
           <div class="ratio-formula">純資産 ÷ 総資産</div>
           <div><span class="ratio-value" id="r-equity">—</span><span class="ratio-unit" id="r-equity-u"></span></div>
           <div class="ratio-bar-bg"><div class="ratio-bar-fill" id="b-equity" style="background:#639922;width:0%"></div></div>
           <div class="bs-source">BSより自動取得</div>
         </div>
-        <div class="ratio-card">
+        <div class="ratio-card" data-tooltip="いかに起債せず固定資産を投資できているかを見る指標。低いほうが望ましい。">
           <div class="ratio-name">固定比率</div>
           <div class="ratio-formula">固定資産 ÷ 純資産</div>
           <div><span class="ratio-value" id="r-fixed">—</span><span class="ratio-unit" id="r-fixed-u"></span></div>
           <div class="ratio-bar-bg"><div class="ratio-bar-fill" id="b-fixed" style="background:#D85A30;width:0%"></div></div>
           <div class="bs-source">BSより自動取得</div>
         </div>
-        <div class="ratio-card" style="grid-column:span 2;">
+        <div class="ratio-card" style="grid-column:span 2;" data-tooltip="いかに起債せず固定資産を投資できているかを見る指標。低いほうが望ましい。（固定比率より使われる指標）">
           <div class="ratio-name">固定長期適合率</div>
           <div class="ratio-formula">固定資産 ÷ （純資産 + 固定負債）</div>
           <div><span class="ratio-value" id="r-ltfit">—</span><span class="ratio-unit" id="r-ltfit-u"></span></div>
@@ -195,7 +226,7 @@ header p { font-size: 12px; color: #888; margin-top: 2px; }
           <div class="ratio-bar-bg"><div class="ratio-bar-fill" id="b-tturn" style="background:#185FA5;width:0%"></div></div>
           <div class="bs-source">BSの「有形固定資産」を使用</div>
         </div>
-        <div class="ratio-card">
+        <div class="ratio-card" data-tooltip="売れ行きが良いのかの指標。高い方が望ましい。モノや業界によってかなり異なるので同業他社と比較して目安を算出。">
           <div class="ratio-name">棚卸資産回転率</div>
           <div class="ratio-formula">売上原価 ÷ 棚卸資産</div>
           <div><span class="ratio-value" id="r-iturn">—</span><span class="ratio-unit" id="r-iturn-u"></span></div>
