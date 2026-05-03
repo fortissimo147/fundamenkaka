@@ -1,0 +1,65 @@
+name: IRBankデータ更新
+
+on:
+  schedule:
+    - cron: '0 1 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python依存ライブラリ
+        run: pip install pandas openpyxl xlrd
+
+      - name: IRBank CSVダウンロード
+        run: |
+          DATE=$(date +'%Y-%m')
+          mkdir -p data/$DATE
+          curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
+            -o data/$DATE/fy-balance-sheet.csv \
+            https://f.irbank.net/files/0000/fy-balance-sheet.csv
+          curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
+            -o data/$DATE/fy-profit-and-loss.csv \
+            https://f.irbank.net/files/0000/fy-profit-and-loss.csv
+
+      - name: JPX銘柄マスタ取得・変換
+        run: |
+          curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
+            -o /tmp/data_j.xls \
+            "https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xls"
+          python3 - <<'EOF'
+          import pandas as pd
+          df = pd.read_excel('/tmp/data_j.xls', dtype=str)
+          cols = ['コード', '銘柄名', '市場・商品区分', '33業種コード', '33業種区分']
+          df = df[[c for c in cols if c in df.columns]]
+          df.to_csv('data/companies.csv', index=False, encoding='utf-8-sig')
+          EOF
+
+      - name: マニフェスト更新
+        run: |
+          python3 - <<'EOF'
+          import json, os
+          snapshots = sorted([
+            d for d in os.listdir('data')
+            if os.path.isdir(f'data/{d}') and '-' in d and d[:4].isdigit()
+          ])
+          manifest = {"latest": snapshots[-1] if snapshots else "", "snapshots": snapshots}
+          with open('data/manifest.json', 'w') as f:
+            json.dump(manifest, f, ensure_ascii=False)
+          EOF
+
+      - name: コミット・プッシュ
+        run: |
+          DATE=$(date +'%Y-%m')
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git diff --staged --quiet || git commit -m "データ更新: $(date +'%Y年%m月')"
+          git push
