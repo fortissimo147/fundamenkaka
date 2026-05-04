@@ -27,6 +27,10 @@ header p { font-size: 12px; color: #888; margin-top: 2px; }
 .co-sector-s { color: #999; font-size: 10px; margin-left: auto; white-space: nowrap; }
 #add-co-btn { font-size: 12px; background: #1a1a1a; color: #fff; border: none; border-radius: 7px; padding: 7px 16px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
 #add-co-btn:hover { background: #333; }
+.date-wrap { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.date-wrap label { font-size: 11px; color: #888; white-space: nowrap; }
+#as-of-date { font-size: 12px; border: 0.5px solid #e0ddd8; border-radius: 7px; padding: 6px 10px; outline: none; background: #fff; color: #1a1a1a; cursor: pointer; }
+#as-of-date:focus { border-color: #888; }
 .data-status { font-size: 10px; color: #bbb; margin-top: 5px; }
 
 /* ===== テーブル ===== */
@@ -51,7 +55,8 @@ tr:last-child td { border-bottom: none; }
 .co-code-h { font-size: 11px; color: #888; }
 .co-name-h { font-size: 12px; font-weight: 500; margin-top: 2px; line-height: 1.4; }
 .co-tag-h { font-size: 10px; color: #27500A; background: #EAF3DE; border-radius: 4px; padding: 2px 6px; margin-top: 5px; display: inline-block; }
-.co-link-h { font-size: 10px; color: #378ADD; text-decoration: none; display: block; margin-top: 5px; }
+.co-fy-h { font-size: 10px; color: #aaa; display: block; margin-top: 4px; }
+.co-link-h { font-size: 10px; color: #378ADD; text-decoration: none; display: block; margin-top: 4px; }
 .co-link-h:hover { text-decoration: underline; }
 .co-del { background: none; border: none; color: #d0cdc8; cursor: pointer; font-size: 15px; line-height: 1; flex-shrink: 0; }
 .co-del:hover { color: #E24B4A; }
@@ -85,6 +90,10 @@ tr:last-child td { border-bottom: none; }
         <div class="co-dropdown" id="co-dropdown"></div>
       </div>
       <button id="add-co-btn">+ 追加</button>
+      <div class="date-wrap">
+        <label for="as-of-date">基準日</label>
+        <input type="date" id="as-of-date">
+      </div>
     </div>
     <div class="data-status" id="data-status">データ読み込み中...</div>
   </div>
@@ -106,7 +115,7 @@ tr:last-child td { border-bottom: none; }
 
 <script>
 let companies = [];
-let plData = {}, bsData = {};
+let plAllData = {}, bsAllData = {};
 let plHeaders = [], bsHeaders = [];
 let selectedCodes = [];
 let selectedMetrics = [];
@@ -122,11 +131,28 @@ const DEFAULT_METRICS = [
   {key:'総資産',       source:'bs'},
 ];
 
-const LOWER_BETTER = new Set(['固定比率','固定長期適合率','負債比率','有利子負債比率','PBR','PER']);
+const LOWER_BETTER = new Set(['固定比率','固定長期適合率','負債比率','有利子負債比率']);
 const SKIP_COLS = new Set(['コード','会社名','銘柄名','市場','業種','決算期','決算月','上場','証券コード','','ティッカー']);
 
+function parseFiscalDate(str) {
+  if (!str) return null;
+  const m = str.match(/(\d{4})[\/\-](\d{1,2})/);
+  if (!m) return null;
+  const year = parseInt(m[1]), month = parseInt(m[2]);
+  return new Date(year, month, 0);
+}
+
+function getRowAsOf(rows, asOf) {
+  if (!rows || !rows.length) return null;
+  const candidates = rows
+    .map(r => ({ r, d: parseFiscalDate(r['決算期']) }))
+    .filter(x => x.d && x.d <= asOf)
+    .sort((a, b) => b.d - a.d);
+  return candidates.length ? candidates[0] : null;
+}
+
 function isRatioCol(key) {
-  return /比率|ROE|ROA|ROIC|利回り|率$|マージン|yield/i.test(key);
+  return /比率|ROE|ROA|ROIC|利回り|率$|マージン/i.test(key);
 }
 function isPerShareCol(key) {
   return /EPS|BPS|DPS|一株/.test(key);
@@ -139,22 +165,21 @@ function fmtVal(key, raw) {
   if (raw === '' || raw === '-' || raw === 'NaN' || raw == null) return null;
   const v = parseFloat(raw);
   if (!isFinite(v)) return null;
-  if (isRatioCol(key))  return v.toFixed(1) + '%';
-  if (isPERPBR(key))    return v.toFixed(1) + '倍';
+  if (isRatioCol(key))    return v.toFixed(1) + '%';
+  if (isPERPBR(key))      return v.toFixed(1) + '倍';
   if (isPerShareCol(key)) return v.toLocaleString() + '円';
-  // 大きな数値（百万円単位と仮定）
   const a = Math.abs(v);
-  let s = '';
-  if (a >= 100000) s = (v / 100000).toFixed(2) + '兆';
-  else if (a >= 100) s = Math.round(v / 100).toLocaleString() + '億';
-  else if (a >= 1)   s = v.toFixed(0) + '百万';
-  else               s = v.toFixed(2);
-  return s;
+  if (a >= 1000000) return (v / 1000000).toFixed(1) + '兆';
+  if (a >= 100)     return Math.round(v / 100).toLocaleString() + '億';
+  if (a >= 1)       return v.toFixed(0) + '百万';
+  return v.toFixed(2);
 }
 
-// ===== データ読み込み =====
 async function loadData() {
   const status = document.getElementById('data-status');
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('as-of-date').value = today;
+
   try {
     const cRes = await fetch('data/companies.csv');
     if (!cRes.ok) throw new Error();
@@ -179,9 +204,11 @@ async function loadData() {
         fetch(`data/${snap}/fy-profit-and-loss.csv`),
         fetch(`data/${snap}/fy-balance-sheet.csv`)
       ]);
-      if (plRes.ok) { const r = parseIRBankCSV(await plRes.text()); plData = r.data; plHeaders = r.headers; }
-      if (bsRes.ok) { const r = parseIRBankCSV(await bsRes.text()); bsData = r.data; bsHeaders = r.headers; }
-      status.textContent = `IRBankデータ: ${snap}　${Object.keys(plData).length}社`;
+      if (plRes.ok) { const r = parseIRBankCSV(await plRes.text()); plAllData = r.data; plHeaders = r.headers; }
+      if (bsRes.ok) { const r = parseIRBankCSV(await bsRes.text()); bsAllData = r.data; bsHeaders = r.headers; }
+      const coCount = Object.keys(plAllData).length;
+      const sampleRows = Object.values(plAllData)[0] || [];
+      status.textContent = `IRBankデータ: ${snap}　${coCount}社　${sampleRows.length}期分`;
       populateDropdown();
       initDefaultMetrics();
     } else {
@@ -226,7 +253,8 @@ function parseIRBankCSV(text) {
     if (!code) continue;
     const row = {};
     headers.forEach((h, j) => { row[h] = cols[j]?.trim() || ''; });
-    data[code] = row;
+    if (!data[code]) data[code] = [];
+    data[code].push(row);
   }
   return {data, headers};
 }
@@ -234,7 +262,6 @@ function parseIRBankCSV(text) {
 function populateDropdown() {
   const sel = document.getElementById('metric-select');
   sel.innerHTML = '<option value="">指標を追加...</option>';
-
   const addGroup = (label, headers, source) => {
     const cols = headers.filter(h => !SKIP_COLS.has(h));
     if (!cols.length) return;
@@ -259,7 +286,6 @@ function initDefaultMetrics() {
   });
 }
 
-// ===== 検索 =====
 function initSearch() {
   const input = document.getElementById('co-search');
   const dd    = document.getElementById('co-dropdown');
@@ -308,6 +334,10 @@ function initSearch() {
     }
   });
 
+  document.getElementById('as-of-date').addEventListener('change', () => {
+    if (selectedCodes.length) renderTable();
+  });
+
   document.getElementById('metric-add-btn').addEventListener('click', () => {
     const val = document.getElementById('metric-select').value;
     if (!val) return;
@@ -322,7 +352,6 @@ function initSearch() {
   });
 }
 
-// ===== 企業追加・削除 =====
 function addCompany(code) {
   if (selectedCodes.includes(code)) return;
   if (selectedCodes.length >= 8) { alert('最大8社まで追加できます'); return; }
@@ -340,7 +369,6 @@ function removeMetric(key, source) {
   renderTable();
 }
 
-// ===== テーブル描画 =====
 function renderTable() {
   const empty = document.getElementById('empty-state');
   const wrap  = document.getElementById('table-wrap');
@@ -349,7 +377,16 @@ function renderTable() {
   }
   empty.style.display = 'none'; wrap.style.display = 'block';
 
-  // ヘッダー
+  const asOf = new Date(document.getElementById('as-of-date').value);
+
+  const coRows = {};
+  selectedCodes.forEach(code => {
+    coRows[code] = {
+      pl: getRowAsOf(plAllData[code] || [], asOf),
+      bs: getRowAsOf(bsAllData[code] || [], asOf),
+    };
+  });
+
   const head = document.getElementById('t-head');
   head.innerHTML = '';
   const trH = document.createElement('tr');
@@ -360,7 +397,9 @@ function renderTable() {
   trH.appendChild(thLabel);
 
   selectedCodes.forEach(code => {
-    const co = companies.find(c => c.code === code);
+    const co  = companies.find(c => c.code === code);
+    const fy  = coRows[code].pl?.d || coRows[code].bs?.d;
+    const fyStr = fy ? `${fy.getFullYear()}/${fy.getMonth()+1}期` : '—';
     const th = document.createElement('th');
     th.className = 'col-co';
     th.innerHTML = `
@@ -370,6 +409,7 @@ function renderTable() {
             <div class="co-code-h">${code}</div>
             <div class="co-name-h">${co?.name || ''}</div>
             ${co?.s33n && co.s33n !== '-' ? `<span class="co-tag-h">${co.s33n}</span>` : ''}
+            <span class="co-fy-h">決算期: ${fyStr}</span>
             <a class="co-link-h" href="https://irbank.net/${code}" target="_blank" rel="noopener">IRBankで見る →</a>
           </div>
           <button class="co-del" onclick="removeCompany('${code}')">×</button>
@@ -379,32 +419,30 @@ function renderTable() {
   });
   head.appendChild(trH);
 
-  // ボディ
   const body = document.getElementById('t-body');
   body.innerHTML = '';
 
   selectedMetrics.forEach(m => {
     const rawVals = selectedCodes.map(code => {
-      const d = m.source === 'pl' ? plData : bsData;
-      return d[code]?.[m.key] ?? '';
+      const entry = m.source === 'pl' ? coRows[code].pl : coRows[code].bs;
+      return entry?.r?.[m.key] ?? '';
     });
-    const nums    = rawVals.map(v => parseFloat(v));
-    const valids  = nums.filter(v => isFinite(v));
-    const maxV    = valids.length ? Math.max(...valids) : null;
-    const minV    = valids.length ? Math.min(...valids) : null;
+    const nums   = rawVals.map(v => parseFloat(v));
+    const valids = nums.filter(v => isFinite(v));
+    const maxV   = valids.length ? Math.max(...valids) : null;
+    const minV   = valids.length ? Math.min(...valids) : null;
     const lowerBetter = LOWER_BETTER.has(m.key);
 
     const tr = document.createElement('tr');
 
     const tdLabel = document.createElement('td');
     tdLabel.className = 'col-label';
-    // Escape key for onclick safety
-    const escapedKey    = m.key.replace(/'/g, "\\'");
-    const escapedSource = m.source.replace(/'/g, "\\'");
+    const ek = m.key.replace(/'/g, "\\'");
+    const es = m.source.replace(/'/g, "\\'");
     tdLabel.innerHTML = `
       <div class="col-label-cell">
         <span>${m.key}</span>
-        <button class="metric-del" onclick="removeMetric('${escapedKey}','${escapedSource}')">×</button>
+        <button class="metric-del" onclick="removeMetric('${ek}','${es}')">×</button>
       </div>`;
     tr.appendChild(tdLabel);
 
