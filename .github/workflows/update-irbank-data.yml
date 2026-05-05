@@ -1,9 +1,7 @@
 name: IRBankデータ更新
 
 on:
-  schedule:
-    - cron: '0 1 1 * *'  # 毎月1日 AM1:00 UTC
-  workflow_dispatch:       # 手動実行も可能
+  workflow_dispatch:       # 手動実行
 
 permissions:
   contents: write
@@ -11,183 +9,115 @@ permissions:
 jobs:
   update-data:
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - uses: actions/checkout@v4
 
-      # ── index.html用: 月次スナップショット ──────────────────────────────
-      - name: 月次CSVダウンロード (index.html用)
+      # ── uploadフォルダから年別ディレクトリへ整理 ────────────────────────
+      - name: uploadフォルダから年別に整理
         run: |
-          DATE=$(date +'%Y-%m')
-          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-          mkdir -p data/$DATE
-
-          HTTP=$(curl -s -o data/$DATE/fy-balance-sheet.csv -w "%{http_code}" \
-            -L -A "${UA}" -H "Referer: https://irbank.net/" \
-            https://f.irbank.net/files/0000/fy-balance-sheet.csv)
-          echo "BS HTTP: ${HTTP}"
-          [ "${HTTP}" = "200" ] || echo "WARNING: BS download returned ${HTTP}"
-
-          HTTP=$(curl -s -o data/$DATE/fy-profit-and-loss.csv -w "%{http_code}" \
-            -L -A "${UA}" -H "Referer: https://irbank.net/" \
-            https://f.irbank.net/files/0000/fy-profit-and-loss.csv)
-          echo "PL HTTP: ${HTTP}"
-          [ "${HTTP}" = "200" ] || echo "WARNING: PL download returned ${HTTP}"
-
-      # ── compare.html用: 年別CSVダウンロード ─────────────────────────────
-      - name: 年別CSVダウンロード (compare.html用)
-        run: |
-          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-          BASE="https://f.irbank.net/files"
-          COOKIE_JAR="/tmp/irbank_cookies.txt"
-
-          # セッションクッキーを取得
-          curl -s -L -A "${UA}" -c "${COOKIE_JAR}" -b "${COOKIE_JAR}" \
-            https://irbank.net/ > /dev/null
-          echo "Cookie jar: $(wc -l < ${COOKIE_JAR}) entries"
-
-          for YEAR in $(seq 2013 2025); do
-            OUTDIR="data/${YEAR}"
-            YY=$(printf "%02d" $((YEAR % 100)))
-            mkdir -p "${OUTDIR}"
-            echo "=== Trying ${YEAR} ==="
-
-            # 複数URLパターンを試す (一時ファイルに落として成功時のみ置換)
-            PL_OK=0
-            for URL_PL in \
-              "${BASE}/00${YY}/fy-profit-and-loss.csv" \
-              "${BASE}/${YEAR}/fy-profit-and-loss.csv" \
-              "${BASE}/00${YY}/pl.csv"; do
-              HTTP=$(curl -s -o "${OUTDIR}/pl.csv.tmp" -w "%{http_code}" \
-                -L -A "${UA}" -H "Referer: https://irbank.net/" \
-                -c "${COOKIE_JAR}" -b "${COOKIE_JAR}" "${URL_PL}")
-              echo "  PL ${URL_PL} -> HTTP ${HTTP}"
-              if [ "${HTTP}" = "200" ] && [ -s "${OUTDIR}/pl.csv.tmp" ]; then
-                if ! head -c 20 "${OUTDIR}/pl.csv.tmp" | grep -q "<!DOCTYPE\|<html"; then
-                  mv "${OUTDIR}/pl.csv.tmp" "${OUTDIR}/pl.csv"
-                  echo "  PL OK ($(wc -l < "${OUTDIR}/pl.csv") lines)"
-                  PL_OK=1
-                  break
-                else
-                  echo "  PL got HTML: $(head -c 80 "${OUTDIR}/pl.csv.tmp")"
-                fi
-              fi
-              rm -f "${OUTDIR}/pl.csv.tmp"
-            done
-            if [ "${PL_OK}" = "0" ] && [ -f "${OUTDIR}/pl.csv" ]; then
-              echo "  PL: keeping existing file ($(wc -l < "${OUTDIR}/pl.csv") lines)"
-            fi
-
-            BS_OK=0
-            for URL_BS in \
-              "${BASE}/00${YY}/fy-balance-sheet.csv" \
-              "${BASE}/${YEAR}/fy-balance-sheet.csv" \
-              "${BASE}/00${YY}/bs.csv"; do
-              HTTP=$(curl -s -o "${OUTDIR}/bs.csv.tmp" -w "%{http_code}" \
-                -L -A "${UA}" -H "Referer: https://irbank.net/" \
-                -c "${COOKIE_JAR}" -b "${COOKIE_JAR}" "${URL_BS}")
-              echo "  BS ${URL_BS} -> HTTP ${HTTP}"
-              if [ "${HTTP}" = "200" ] && [ -s "${OUTDIR}/bs.csv.tmp" ]; then
-                if ! head -c 20 "${OUTDIR}/bs.csv.tmp" | grep -q "<!DOCTYPE\|<html"; then
-                  mv "${OUTDIR}/bs.csv.tmp" "${OUTDIR}/bs.csv"
-                  echo "  BS OK ($(wc -l < "${OUTDIR}/bs.csv") lines)"
-                  BS_OK=1
-                  break
-                else
-                  echo "  BS got HTML: $(head -c 80 "${OUTDIR}/bs.csv.tmp")"
-                fi
-              fi
-              rm -f "${OUTDIR}/bs.csv.tmp"
-            done
-            if [ "${BS_OK}" = "0" ] && [ -f "${OUTDIR}/bs.csv" ]; then
-              echo "  BS: keeping existing file ($(wc -l < "${OUTDIR}/bs.csv") lines)"
-            fi
-
-            [ "${PL_OK}" = "0" ] && [ ! -f "${OUTDIR}/pl.csv" ] && echo "  PL FAILED for ${YEAR} (no file)"
-            [ "${BS_OK}" = "0" ] && [ ! -f "${OUTDIR}/bs.csv" ] && echo "  BS FAILED for ${YEAR} (no file)"
-          done
-
-      # ── 0000ファイルを年別に分割 ─────────────────────────────────────────
-      - name: 0000ファイルを年別に分割
-        run: |
-          DATE=$(date +'%Y-%m')
           python3 << 'EOF'
-          import os, sys
+          import os, shutil
 
-          def split_by_year(src, dst_base, filename):
-              if not os.path.exists(src):
-                  print(f"SKIP: {src} not found")
-                  return
-              with open(src, encoding='utf-8-sig', errors='replace') as f:
+          def detect_year_and_type(filepath):
+              with open(filepath, encoding='utf-8-sig', errors='replace') as f:
                   lines = f.readlines()
-
               hi = -1
-              preamble = []
               for i, line in enumerate(lines[:8]):
                   if line.startswith('コード'):
                       hi = i
                       break
-                  preamble.append(line)
               if hi < 0:
-                  print(f"No header in {src}")
-                  return
-
+                  return None, None
               headers = lines[hi].rstrip('\n').split(',')
               try:
                   yi = headers.index('年度')
               except ValueError:
-                  print(f"No 年度 column in {src}")
-                  return
-
-              year_rows = {}
+                  return None, None
+              year = None
               for line in lines[hi+1:]:
                   cols = line.split(',')
-                  if not cols[0].strip() or len(cols[0].strip()) < 4:
+                  if not cols[0].strip():
                       continue
                   fy = cols[yi].strip() if yi < len(cols) else ''
-                  year = fy.split('/')[0] if '/' in fy else fy[:4]
-                  if not year.isdigit() or len(year) != 4:
-                      continue
-                  year_rows.setdefault(year, []).append(line)
+                  y = fy.split('/')[0] if '/' in fy else fy[:4]
+                  if y.isdigit() and len(y) == 4:
+                      year = y
+                      break
+              if not year:
+                  return None, None
+              is_pl = any(h in headers for h in ['売上高', '営業利益', '経常利益'])
+              is_bs = any(h in headers for h in ['総資産', '純資産', '自己資本'])
+              ftype = 'pl' if is_pl else ('bs' if is_bs else None)
+              return year, ftype
 
-              print(f"Years found in {src}: {sorted(year_rows.keys())}")
-              for year, rows in year_rows.items():
-                  outdir = f"{dst_base}/{year}"
-                  outpath = f"{outdir}/{filename}"
-                  os.makedirs(outdir, exist_ok=True)
-                  if os.path.exists(outpath):
-                      print(f"  SKIP {outpath} (CDN file takes priority)")
+          upload_dir = 'data/upload'
+          if os.path.isdir(upload_dir):
+              for fname in sorted(os.listdir(upload_dir)):
+                  if not fname.endswith('.csv'):
                       continue
-                  with open(outpath, 'w', encoding='utf-8') as f:
-                      f.writelines(preamble)
-                      f.write(lines[hi])
-                      f.writelines(rows)
-                  print(f"  Wrote {len(rows)} rows -> {outpath}")
-
-          import os as _os
-          date_dirs = sorted([d for d in _os.listdir('data') if '-' in d], reverse=True)
-          latest = date_dirs[0] if date_dirs else None
-          if latest:
-              split_by_year(f'data/{latest}/fy-profit-and-loss.csv', 'data', 'pl.csv')
-              split_by_year(f'data/{latest}/fy-balance-sheet.csv',   'data', 'bs.csv')
+                  fpath = os.path.join(upload_dir, fname)
+                  year, ftype = detect_year_and_type(fpath)
+                  if not year or not ftype:
+                      print(f"  SKIP {fname}: year/type不明")
+                      continue
+                  dest = f'data/{year}/{ftype}.csv'
+                  if os.path.exists(dest):
+                      print(f"  SKIP {dest} (既存)")
+                      continue
+                  os.makedirs(f'data/{year}', exist_ok=True)
+                  shutil.copy2(fpath, dest)
+                  print(f"  {fname} -> {dest}")
           else:
-              print("No monthly snapshot found")
+              print("data/upload フォルダが存在しません")
           EOF
 
-      # ── manifest.json 更新 ───────────────────────────────────────────────
-      - name: manifest.json 更新
+      # ── 統合CSV作成 (all-pl.csv / all-bs.csv) ───────────────────────────
+      - name: 統合CSV作成
         run: |
-          DATE=$(date +'%Y-%m')
-          YEARS_WITH_DATA=$(find data/ -mindepth 2 -name "pl.csv" \
-            | sed 's|data/||;s|/pl.csv||' | grep -E '^[0-9]{4}$' | sort -n)
-          LATEST_YEAR=$(echo "$YEARS_WITH_DATA" | tail -1)
-          ALL_JSON=$(echo "$YEARS_WITH_DATA" | grep . | jq -R . | jq -s .)
-          echo "{\"latest\":\"${DATE}\",\"latest_year\":\"${LATEST_YEAR}\",\"years\":${ALL_JSON}}" \
-            > data/manifest.json
-          cat data/manifest.json
+          python3 << 'EOF'
+          import os
 
+          def create_combined(data_dir, output_file, filename):
+              year_dirs = sorted([d for d in os.listdir(data_dir)
+                                  if os.path.isdir(os.path.join(data_dir, d))
+                                  and d.isdigit() and len(d) == 4])
+              header_written = False
+              total = 0
+              with open(output_file, 'w', encoding='utf-8') as out:
+                  for year in year_dirs:
+                      src = os.path.join(data_dir, year, filename)
+                      if not os.path.exists(src):
+                          continue
+                      with open(src, encoding='utf-8-sig', errors='replace') as f:
+                          lines = f.readlines()
+                      hi = -1
+                      preamble = []
+                      for i, line in enumerate(lines[:8]):
+                          if line.startswith('コード'):
+                              hi = i
+                              break
+                          preamble.append(line)
+                      if hi < 0:
+                          continue
+                      if not header_written:
+                          out.writelines(preamble)
+                          out.write(lines[hi])
+                          header_written = True
+                      count = 0
+                      for line in lines[hi+1:]:
+                          if line.strip():
+                              out.write(line)
+                              count += 1
+                      total += count
+                      print(f"  {year}: {count}行")
+              print(f"  -> {output_file} 合計{total}行")
+
+          create_combined('data', 'data/all-pl.csv', 'pl.csv')
+          create_combined('data', 'data/all-bs.csv', 'bs.csv')
+          EOF
+
+      # ── コミット・プッシュ ───────────────────────────────────────────────
       - name: コミット・プッシュ
         run: |
           git config user.name "github-actions[bot]"
