@@ -118,7 +118,7 @@ tr:last-child td { border-bottom: none; }
 
 <script>
 let companies = [];
-let plData = {}, bsData = {};
+let plData = {}, bsData = {};   // code -> row object (1行/社)
 let plHeaders = [], bsHeaders = [];
 let selectedCodes = [];
 let selectedMetrics = [];
@@ -151,21 +151,24 @@ function fmtVal(key, raw) {
   if (isRatioCol(key))    return v.toFixed(1) + '%';
   if (isPERPBR(key))      return v.toFixed(1) + '倍';
   if (isPerShareCol(key)) return v.toLocaleString() + '円';
-  // 金額系: IRBankは百万円単位
+  // 金額系: IRBankは円単位
   const a = Math.abs(v);
-  if (a >= 1000000) return (v / 1000000).toFixed(2) + '兆';
-  if (a >= 100)     return Math.round(v / 100).toLocaleString() + '億';
-  if (a >= 1)       return v.toFixed(0) + '百万';
-  return v.toFixed(2);
+  if (a >= 1e12) return (v / 1e12).toFixed(2) + '兆';
+  if (a >= 1e8)  return Math.round(v / 1e8).toLocaleString() + '億';
+  if (a >= 1e4)  return Math.round(v / 1e4).toLocaleString() + '万';
+  return v.toLocaleString() + '円';
 }
 
+// ===== CSV パース (1社1行形式) =====
 function parseIRBankCSV(text) {
   const lines = text.replace(/\r/g, '').replace(/^﻿/, '').split('\n');
+  // ヘッダー行を探す（"コード"で始まる行）
   let hi = -1;
   for (let i = 0; i < Math.min(lines.length, 8); i++) {
     if (lines[i].startsWith('コード')) { hi = i; break; }
   }
   if (hi < 0) return { data: {}, headers: [] };
+
   const headers = lines[hi].split(',').map(h => h.trim());
   const data = {};
   for (let i = hi + 1; i < lines.length; i++) {
@@ -179,13 +182,16 @@ function parseIRBankCSV(text) {
   return { data, headers };
 }
 
+// ===== データ読み込み =====
 async function loadData() {
   const status = document.getElementById('data-status');
   try {
+    // 企業マスタ
     const cRes = await fetch('data/companies.csv');
     if (!cRes.ok) throw new Error('companies.csv not found');
     parseCompanies(await cRes.text());
 
+    // manifest から利用可能年度を取得
     let manifest = {};
     try {
       const mRes = await fetch('data/manifest.json');
@@ -194,6 +200,7 @@ async function loadData() {
 
     availableYears = (manifest.years || []).filter(y => /^\d{4}$/.test(y)).sort((a,b) => b-a);
 
+    // manifest にない場合は自動検索
     if (!availableYears.length) {
       for (let y = 2025; y >= 2013; y--) {
         try {
@@ -209,6 +216,7 @@ async function loadData() {
       return;
     }
 
+    // 年度セレクタを構築
     const sel = document.getElementById('year-select');
     sel.innerHTML = availableYears.map(y => `<option value="${y}">${y}年度</option>`).join('');
     currentYear = availableYears[0];
@@ -236,8 +244,14 @@ async function loadYear(year) {
       fetch(`data/${year}/pl.csv`),
       fetch(`data/${year}/bs.csv`)
     ]);
-    if (plRes.ok) { const r = parseIRBankCSV(await plRes.text()); plData = r.data; plHeaders = r.headers; }
-    if (bsRes.ok) { const r = parseIRBankCSV(await bsRes.text()); bsData = r.data; bsHeaders = r.headers; }
+    if (plRes.ok) {
+      const r = parseIRBankCSV(await plRes.text());
+      plData = r.data; plHeaders = r.headers;
+    }
+    if (bsRes.ok) {
+      const r = parseIRBankCSV(await bsRes.text());
+      bsData = r.data; bsHeaders = r.headers;
+    }
     const coCount = Object.keys(plData).length;
     status.textContent = `${year}年度　${coCount}社`;
     populateMetricDropdown();
@@ -250,7 +264,12 @@ async function loadYear(year) {
 function parseCompanies(text) {
   const lines = text.replace(/\r/g, '').replace(/^﻿/, '').split('\n');
   const h = lines[0].split(',').map(x => x.trim());
-  const idx = { code: h.indexOf('コード'), name: h.indexOf('銘柄名'), market: h.indexOf('市場・商品区分'), s33n: h.indexOf('33業種区分') };
+  const idx = {
+    code:   h.indexOf('コード'),
+    name:   h.indexOf('銘柄名'),
+    market: h.indexOf('市場・商品区分'),
+    s33n:   h.indexOf('33業種区分')
+  };
   companies = [];
   for (let r = 1; r < lines.length; r++) {
     const c = lines[r].split(',');
@@ -288,6 +307,7 @@ function initDefaultMetrics() {
   );
 }
 
+// ===== 検索 =====
 function initSearch() {
   const input = document.getElementById('co-search');
   const dd    = document.getElementById('co-dropdown');
@@ -331,7 +351,9 @@ function initSearch() {
   });
 
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && pendingCode) { addCompany(pendingCode); input.value = ''; pendingCode = null; }
+    if (e.key === 'Enter' && pendingCode) {
+      addCompany(pendingCode); input.value = ''; pendingCode = null;
+    }
   });
 
   document.getElementById('metric-add-btn').addEventListener('click', () => {
@@ -347,6 +369,7 @@ function initSearch() {
   });
 }
 
+// ===== 企業管理 =====
 function addCompany(code) {
   if (selectedCodes.includes(code)) return;
   if (selectedCodes.length >= 8) { alert('最大8社まで追加できます'); return; }
@@ -379,12 +402,14 @@ function renderChips() {
   }).join('');
 }
 
+// ===== テーブル描画 =====
 function renderTable() {
   const empty = document.getElementById('empty-state');
   const wrap  = document.getElementById('table-wrap');
   if (!selectedCodes.length) { empty.style.display = 'block'; wrap.style.display = 'none'; return; }
   empty.style.display = 'none'; wrap.style.display = 'block';
 
+  // ヘッダー
   const head = document.getElementById('t-head');
   head.innerHTML = '';
   const trH = document.createElement('tr');
@@ -411,6 +436,7 @@ function renderTable() {
   });
   head.appendChild(trH);
 
+  // ボディ
   const body = document.getElementById('t-body');
   body.innerHTML = '';
   selectedMetrics.forEach(m => {
