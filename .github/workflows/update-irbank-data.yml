@@ -11,53 +11,159 @@ permissions:
 jobs:
   update-data:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Python依存ライブラリ
-        run: pip install pandas openpyxl xlrd
-
-      - name: IRBank CSVダウンロード
+      - name: 月次CSVダウンロード (index.html用)
         run: |
           DATE=$(date +'%Y-%m')
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
           mkdir -p data/$DATE
-          curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-            -o data/$DATE/fy-balance-sheet.csv \
-            https://f.irbank.net/files/0000/fy-balance-sheet.csv
-          curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-            -o data/$DATE/fy-profit-and-loss.csv \
-            https://f.irbank.net/files/0000/fy-profit-and-loss.csv
 
-      - name: JPX銘柄マスタ取得・変換
+          HTTP=$(curl -s -o data/$DATE/fy-balance-sheet.csv -w "%{http_code}" \
+            -L -A "${UA}" -H "Referer: https://irbank.net/" \
+            https://f.irbank.net/files/0000/fy-balance-sheet.csv)
+          echo "BS HTTP: ${HTTP}"
+          [ "${HTTP}" = "200" ] || echo "WARNING: BS download returned ${HTTP}"
+
+          HTTP=$(curl -s -o data/$DATE/fy-profit-and-loss.csv -w "%{http_code}" \
+            -L -A "${UA}" -H "Referer: https://irbank.net/" \
+            https://f.irbank.net/files/0000/fy-profit-and-loss.csv)
+          echo "PL HTTP: ${HTTP}"
+          [ "${HTTP}" = "200" ] || echo "WARNING: PL download returned ${HTTP}"
+
+      - name: 年別CSVダウンロード (compare.html用)
         run: |
-          curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-            -o /tmp/data_j.xls \
-            "https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xls"
-          python3 - <<'EOF'
-          import pandas as pd
-          df = pd.read_excel('/tmp/data_j.xls', dtype=str)
-          cols = ['コード', '銘柄名', '市場・商品区分', '33業種コード', '33業種区分']
-          df = df[[c for c in cols if c in df.columns]]
-          df.to_csv('data/companies.csv', index=False, encoding='utf-8-sig')
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          BASE="https://f.irbank.net/files"
+
+          for YEAR in $(seq 2013 2025); do
+            OUTDIR="data/${YEAR}"
+            if [ -f "${OUTDIR}/pl.csv" ] && [ -f "${OUTDIR}/bs.csv" ]; then
+              echo "SKIP: ${YEAR} already exists"
+              continue
+            fi
+
+            YY=$(printf "%02d" $((YEAR % 100)))
+            mkdir -p "${OUTDIR}"
+            echo "=== Trying ${YEAR} ==="
+
+            PL_OK=0
+            for URL_PL in \
+              "${BASE}/00${YY}/fy-profit-and-loss.csv" \
+              "${BASE}/${YEAR}/fy-profit-and-loss.csv" \
+              "${BASE}/00${YY}/pl.csv"; do
+              HTTP=$(curl -s -o "${OUTDIR}/pl.csv" -w "%{http_code}" \
+                -L -A "${UA}" -H "Referer: https://irbank.net/" "${URL_PL}")
+              echo "  PL ${URL_PL} -> HTTP ${HTTP}"
+              if [ "${HTTP}" = "200" ] && [ -s "${OUTDIR}/pl.csv" ]; then
+                if ! head -c 20 "${OUTDIR}/pl.csv" | grep -q "<!DOCTYPE\|<html"; then
+                  echo "  PL OK"
+                  PL_OK=1
+                  break
+                fi
+              fi
+              rm -f "${OUTDIR}/pl.csv"
+            done
+
+            BS_OK=0
+            for URL_BS in \
+              "${BASE}/00${YY}/fy-balance-sheet.csv" \
+              "${BASE}/${YEAR}/fy-balance-sheet.csv" \
+              "${BASE}/00${YY}/bs.csv"; do
+              HTTP=$(curl -s -o "${OUTDIR}/bs.csv" -w "%{http_code}" \
+                -L -A "${UA}" -H "Referer: https://irbank.net/" "${URL_BS}")
+              echo "  BS ${URL_BS} -> HTTP ${HTTP}"
+              if [ "${HTTP}" = "200" ] && [ -s "${OUTDIR}/bs.csv" ]; then
+                if ! head -c 20 "${OUTDIR}/bs.csv" | grep -q "<!DOCTYPE\|<html"; then
+                  echo "  BS OK"
+                  BS_OK=1
+                  break
+                fi
+              fi
+              rm -f "${OUTDIR}/bs.csv"
+            done
+
+            [ "${PL_OK}" = "0" ] && echo "  PL FAILED for ${YEAR}"
+            [ "${BS_OK}" = "0" ] && echo "  BS FAILED for ${YEAR}"
+          done
+
+      - name: 0000ファイルを年別に分割
+        run: |
+          python3 << 'EOF'
+          import os
+
+          def split_by_year(src, dst_base, filename):
+              if not os.path.exists(src):
+                  print(f"SKIP: {src} not found")
+                  return
+              with open(src, encoding='utf-8-sig', errors='replace') as f:
+                  lines = f.readlines()
+              hi = -1
+              preamble = []
+              for i, line in enumerate(lines[:8]):
+                  if line.startswith('コード'):
+                      hi = i
+                      break
+                  preamble.append(line)
+              if hi < 0:
+                  print(f"No header in {src}")
+                  return
+              headers = lines[hi].rstrip('\n').split(',')
+              try:
+                  yi = headers.index('年度')
+              except ValueError:
+                  print(f"No 年度 column in {src}")
+                  return
+              year_rows = {}
+              for line in lines[hi+1:]:
+                  cols = line.split(',')
+                  if not cols[0].strip() or len(cols[0].strip()) < 4:
+                      continue
+                  fy = cols[yi].strip() if yi < len(cols) else ''
+                  year = fy.split('/')[0] if '/' in fy else fy[:4]
+                  if not year.isdigit() or len(year) != 4:
+                      continue
+                  year_rows.setdefault(year, []).append(line)
+              print(f"Years found in {src}: {sorted(year_rows.keys())}")
+              for year, rows in year_rows.items():
+                  outdir = f"{dst_base}/{year}"
+                  outpath = f"{outdir}/{filename}"
+                  os.makedirs(outdir, exist_ok=True)
+                  if os.path.exists(outpath):
+                      print(f"  SKIP {outpath} (exists)")
+                      continue
+                  with open(outpath, 'w', encoding='utf-8') as f:
+                      f.writelines(preamble)
+                      f.write(lines[hi])
+                      f.writelines(rows)
+                  print(f"  Wrote {len(rows)} rows -> {outpath}")
+
+          date_dirs = sorted([d for d in os.listdir('data') if '-' in d], reverse=True)
+          latest = date_dirs[0] if date_dirs else None
+          if latest:
+              split_by_year(f'data/{latest}/fy-profit-and-loss.csv', 'data', 'pl.csv')
+              split_by_year(f'data/{latest}/fy-balance-sheet.csv',   'data', 'bs.csv')
+          else:
+              print("No monthly snapshot found")
           EOF
 
-      - name: マニフェスト更新
+      - name: manifest.json 更新
         run: |
-          python3 - <<'EOF'
-          import json, os
-          snapshots = sorted([
-            d for d in os.listdir('data')
-            if os.path.isdir(f'data/{d}') and '-' in d and d[:4].isdigit()
-          ])
-          manifest = {"latest": snapshots[-1] if snapshots else "", "snapshots": snapshots}
-          with open('data/manifest.json', 'w') as f:
-            json.dump(manifest, f, ensure_ascii=False)
-          EOF
+          DATE=$(date +'%Y-%m')
+          YEARS_WITH_DATA=$(find data/ -mindepth 2 -name "pl.csv" \
+            | sed 's|data/||;s|/pl.csv||' | grep -E '^[0-9]{4}$' | sort -n)
+          LATEST_YEAR=$(echo "$YEARS_WITH_DATA" | tail -1)
+          ALL_JSON=$(echo "$YEARS_WITH_DATA" | grep . | jq -R . | jq -s .)
+          echo "{\"latest\":\"${DATE}\",\"latest_year\":\"${LATEST_YEAR}\",\"years\":${ALL_JSON}}" \
+            > data/manifest.json
+          cat data/manifest.json
 
       - name: コミット・プッシュ
         run: |
-          DATE=$(date +'%Y-%m')
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/
