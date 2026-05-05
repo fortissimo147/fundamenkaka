@@ -2,8 +2,8 @@ name: IRBankデータ更新
 
 on:
   schedule:
-    - cron: '0 1 1 * *'  # 毎月1日 AM1:00 UTC
-  workflow_dispatch:       # 手動実行も可能
+    - cron: '0 1 1 * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -17,7 +17,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ── index.html用: 月次スナップショット ──────────────────────────────
       - name: 月次CSVダウンロード (index.html用)
         run: |
           DATE=$(date +'%Y-%m')
@@ -36,7 +35,6 @@ jobs:
           echo "PL HTTP: ${HTTP}"
           [ "${HTTP}" = "200" ] || echo "WARNING: PL download returned ${HTTP}"
 
-      # ── compare.html用: 年別CSVダウンロード (2013-2025) ─────────────────
       - name: 年別CSVダウンロード (compare.html用)
         run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
@@ -50,40 +48,114 @@ jobs:
             fi
 
             YY=$(printf "%02d" $((YEAR % 100)))
-            CODE="00${YY}"
-            echo "=== Downloading ${YEAR} (code=${CODE}) ==="
             mkdir -p "${OUTDIR}"
+            echo "=== Trying ${YEAR} ==="
 
-            HTTP_PL=$(curl -s -o "${OUTDIR}/pl.csv" -w "%{http_code}" \
-              -L -A "${UA}" -H "Referer: https://irbank.net/" \
-              "${BASE}/${CODE}/fy-profit-and-loss.csv")
-            echo "PL HTTP: ${HTTP_PL}"
-
-            HTTP_BS=$(curl -s -o "${OUTDIR}/bs.csv" -w "%{http_code}" \
-              -L -A "${UA}" -H "Referer: https://irbank.net/" \
-              "${BASE}/${CODE}/fy-balance-sheet.csv")
-            echo "BS HTTP: ${HTTP_BS}"
-
-            if [ "${HTTP_PL}" != "200" ]; then
-              echo "PL failed (${HTTP_PL}) - removing"
+            PL_OK=0
+            for URL_PL in \
+              "${BASE}/00${YY}/fy-profit-and-loss.csv" \
+              "${BASE}/${YEAR}/fy-profit-and-loss.csv" \
+              "${BASE}/00${YY}/pl.csv"; do
+              HTTP=$(curl -s -o "${OUTDIR}/pl.csv" -w "%{http_code}" \
+                -L -A "${UA}" -H "Referer: https://irbank.net/" "${URL_PL}")
+              echo "  PL ${URL_PL} -> HTTP ${HTTP}"
+              if [ "${HTTP}" = "200" ] && [ -s "${OUTDIR}/pl.csv" ]; then
+                if ! head -c 20 "${OUTDIR}/pl.csv" | grep -q "<!DOCTYPE\|<html"; then
+                  echo "  PL OK"
+                  PL_OK=1
+                  break
+                fi
+              fi
               rm -f "${OUTDIR}/pl.csv"
-            else
-              echo "PL OK: $(wc -l < ${OUTDIR}/pl.csv) lines"
-            fi
-            if [ "${HTTP_BS}" != "200" ]; then
-              echo "BS failed (${HTTP_BS}) - removing"
+            done
+
+            BS_OK=0
+            for URL_BS in \
+              "${BASE}/00${YY}/fy-balance-sheet.csv" \
+              "${BASE}/${YEAR}/fy-balance-sheet.csv" \
+              "${BASE}/00${YY}/bs.csv"; do
+              HTTP=$(curl -s -o "${OUTDIR}/bs.csv" -w "%{http_code}" \
+                -L -A "${UA}" -H "Referer: https://irbank.net/" "${URL_BS}")
+              echo "  BS ${URL_BS} -> HTTP ${HTTP}"
+              if [ "${HTTP}" = "200" ] && [ -s "${OUTDIR}/bs.csv" ]; then
+                if ! head -c 20 "${OUTDIR}/bs.csv" | grep -q "<!DOCTYPE\|<html"; then
+                  echo "  BS OK"
+                  BS_OK=1
+                  break
+                fi
+              fi
               rm -f "${OUTDIR}/bs.csv"
-            else
-              echo "BS OK: $(wc -l < ${OUTDIR}/bs.csv) lines"
-            fi
+            done
+
+            [ "${PL_OK}" = "0" ] && echo "  PL FAILED for ${YEAR}"
+            [ "${BS_OK}" = "0" ] && echo "  BS FAILED for ${YEAR}"
           done
 
-      # ── manifest.json 更新 ───────────────────────────────────────────────
+      - name: 0000ファイルを年別に分割
+        run: |
+          python3 << 'EOF'
+          import os
+
+          def split_by_year(src, dst_base, filename):
+              if not os.path.exists(src):
+                  print(f"SKIP: {src} not found")
+                  return
+              with open(src, encoding='utf-8-sig', errors='replace') as f:
+                  lines = f.readlines()
+              hi = -1
+              preamble = []
+              for i, line in enumerate(lines[:8]):
+                  if line.startswith('コード'):
+                      hi = i
+                      break
+                  preamble.append(line)
+              if hi < 0:
+                  print(f"No header in {src}")
+                  return
+              headers = lines[hi].rstrip('\n').split(',')
+              try:
+                  yi = headers.index('年度')
+              except ValueError:
+                  print(f"No 年度 column in {src}")
+                  return
+              year_rows = {}
+              for line in lines[hi+1:]:
+                  cols = line.split(',')
+                  if not cols[0].strip() or len(cols[0].strip()) < 4:
+                      continue
+                  fy = cols[yi].strip() if yi < len(cols) else ''
+                  year = fy.split('/')[0] if '/' in fy else fy[:4]
+                  if not year.isdigit() or len(year) != 4:
+                      continue
+                  year_rows.setdefault(year, []).append(line)
+              print(f"Years found in {src}: {sorted(year_rows.keys())}")
+              for year, rows in year_rows.items():
+                  outdir = f"{dst_base}/{year}"
+                  outpath = f"{outdir}/{filename}"
+                  os.makedirs(outdir, exist_ok=True)
+                  if os.path.exists(outpath):
+                      print(f"  SKIP {outpath} (exists)")
+                      continue
+                  with open(outpath, 'w', encoding='utf-8') as f:
+                      f.writelines(preamble)
+                      f.write(lines[hi])
+                      f.writelines(rows)
+                  print(f"  Wrote {len(rows)} rows -> {outpath}")
+
+          date_dirs = sorted([d for d in os.listdir('data') if '-' in d], reverse=True)
+          latest = date_dirs[0] if date_dirs else None
+          if latest:
+              split_by_year(f'data/{latest}/fy-profit-and-loss.csv', 'data', 'pl.csv')
+              split_by_year(f'data/{latest}/fy-balance-sheet.csv',   'data', 'bs.csv')
+          else:
+              print("No monthly snapshot found")
+          EOF
+
       - name: manifest.json 更新
         run: |
           DATE=$(date +'%Y-%m')
           YEARS_WITH_DATA=$(find data/ -mindepth 2 -name "pl.csv" \
-            | sed 's|data/||;s|/pl.csv||' | grep -v '^[0-9]\{4\}-' | sort -n)
+            | sed 's|data/||;s|/pl.csv||' | grep -E '^[0-9]{4}$' | sort -n)
           LATEST_YEAR=$(echo "$YEARS_WITH_DATA" | tail -1)
           ALL_JSON=$(echo "$YEARS_WITH_DATA" | grep . | jq -R . | jq -s .)
           echo "{\"latest\":\"${DATE}\",\"latest_year\":\"${LATEST_YEAR}\",\"years\":${ALL_JSON}}" \
