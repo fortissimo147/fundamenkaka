@@ -81,6 +81,7 @@ tr:last-child td { border-bottom: none; }
 }
 .add-row button:hover { background: #f8f7f4; }
 .add-row-label { font-size: 11px; color: #aaa; white-space: nowrap; }
+.add-row-sep { width: 100%; height: 0; border-top: 0.5px solid #f0ede8; margin: 2px 0; }
 #formula-right-const { width: 80px; display: none; }
 #formula-name { width: 120px; }
 #metric-select { max-width: 200px; }
@@ -153,8 +154,10 @@ tr:last-child td { border-bottom: none; }
 let companies  = [];
 let plData = {}, bsData = {};
 let plHeaders = [], bsHeaders = [];
+let allPlData = {}, allBsData = {};  // year → {code → row}
 let selectedCodes   = [];
-let metrics         = [];
+let metrics         = [];   // {type:'col',  key, source}
+                             // {type:'custom', label, leftKey, leftSrc, op, rightKey, rightSrc, rightConst, pct}
 let pendingCode     = null;
 let availableYears  = [];
 
@@ -195,11 +198,38 @@ function fmtVal(key, raw) {
 }
 
 function fmtCustom(v, pct) {
-  if (v === null || !isFinite(v)) return null;
+  if (!isFinite(v)) return null;
   if (pct) return (v * 100).toFixed(1) + '%';
+  // 小さい数値はそのまま（比率など）
   const a = Math.abs(v);
   if (a < 1000) return v.toFixed(2);
   return fmtMoney(v);
+}
+
+// ===== CSV パース =====
+function parseIRBankCSVCombined(text) {
+  const lines = text.replace(/\r/g, '').replace(/^﻿/, '').split('\n');
+  let hi = -1;
+  for (let i = 0; i < Math.min(lines.length, 8); i++) {
+    if (lines[i].startsWith('コード')) { hi = i; break; }
+  }
+  if (hi < 0) return { byYear: {}, headers: [] };
+  const headers = lines[hi].split(',').map(h => h.trim());
+  const yi = headers.indexOf('年度');
+  const byYear = {};
+  for (let i = hi + 1; i < lines.length; i++) {
+    const cols = lines[i].split(',');
+    const code = cols[0]?.trim();
+    if (!code || code.length < 4) continue;
+    const row = {};
+    headers.forEach((h, j) => { row[h] = cols[j]?.trim() ?? ''; });
+    const fy = yi >= 0 ? (cols[yi]?.trim() || '') : '';
+    const year = fy.split('/')[0] || fy.slice(0, 4);
+    if (!year || !/^\d{4}$/.test(year)) continue;
+    if (!byYear[year]) byYear[year] = {};
+    byYear[year][code] = row;
+  }
+  return { byYear, headers };
 }
 
 function parseIRBankCSV(text) {
@@ -222,6 +252,7 @@ function parseIRBankCSV(text) {
   return { data, headers };
 }
 
+// ===== データ読み込み =====
 async function loadData() {
   const status = document.getElementById('data-status');
   try {
@@ -229,15 +260,21 @@ async function loadData() {
     if (!cRes.ok) throw new Error('companies.csv not found');
     parseCompanies(await cRes.text());
 
-    let manifest = {};
-    try { const r = await fetch('data/manifest.json'); if (r.ok) manifest = await r.json(); } catch(e) {}
+    status.textContent = '全年度データ読み込み中...';
+    const [plRes, bsRes] = await Promise.all([
+      fetch('data/all-pl.csv'), fetch('data/all-bs.csv')
+    ]);
 
-    availableYears = (manifest.years || []).filter(y => /^\d{4}$/.test(y)).sort((a,b) => b-a);
-    if (!availableYears.length) {
-      for (let y = 2025; y >= 2013; y--) {
-        try { const r = await fetch(`data/${y}/pl.csv`); if (r.ok) availableYears.push(String(y)); } catch(e) {}
-      }
+    if (plRes.ok && bsRes.ok) {
+      const plParsed = parseIRBankCSVCombined(await plRes.text());
+      const bsParsed = parseIRBankCSVCombined(await bsRes.text());
+      allPlData  = plParsed.byYear;
+      allBsData  = bsParsed.byYear;
+      plHeaders  = plParsed.headers;
+      bsHeaders  = bsParsed.headers;
+      availableYears = Object.keys(allPlData).sort((a, b) => b - a);
     }
+
     if (!availableYears.length) {
       status.textContent = '年別データ未取得（Actionsでデータを取得してください）';
       initSearch(); return;
@@ -245,11 +282,11 @@ async function loadData() {
 
     const sel = document.getElementById('year-select');
     sel.innerHTML = availableYears.map(y => `<option value="${y}">${y}年度</option>`).join('');
-    await loadYear(availableYears[0]);
+    loadYear(availableYears[0]);
     initSearch();
 
-    sel.addEventListener('change', async () => {
-      await loadYear(sel.value);
+    sel.addEventListener('change', () => {
+      loadYear(sel.value);
       if (selectedCodes.length) renderTable();
     });
   } catch(e) {
@@ -258,21 +295,15 @@ async function loadData() {
   }
 }
 
-async function loadYear(year) {
+function loadYear(year) {
   const status = document.getElementById('data-status');
-  status.textContent = `${year}年度データ読み込み中...`;
-  try {
-    const [plRes, bsRes] = await Promise.all([
-      fetch(`data/${year}/pl.csv`), fetch(`data/${year}/bs.csv`)
-    ]);
-    if (plRes.ok) { const r = parseIRBankCSV(await plRes.text()); plData = r.data; plHeaders = r.headers; }
-    if (bsRes.ok) { const r = parseIRBankCSV(await bsRes.text()); bsData = r.data; bsHeaders = r.headers; }
-    status.textContent = `${year}年度　${Object.keys(plData).length}社`;
-    populateDropdowns();
-    if (!metrics.length) metrics = DEFAULT_METRICS.filter(m =>
-      (m.source === 'pl' ? plHeaders : bsHeaders).includes(m.key)
-    );
-  } catch(e) { status.textContent = `${year}年度 読み込みエラー`; }
+  plData = allPlData[year] || {};
+  bsData = allBsData[year] || {};
+  status.textContent = `${year}年度　${Object.keys(plData).length}社`;
+  populateDropdowns();
+  if (!metrics.length) metrics = DEFAULT_METRICS.filter(m =>
+    (m.source === 'pl' ? plHeaders : bsHeaders).includes(m.key)
+  );
 }
 
 function parseCompanies(text) {
@@ -290,6 +321,7 @@ function parseCompanies(text) {
   }
 }
 
+// ===== ドロップダウン構築 =====
 function buildColOptions(sel, includeConst = false) {
   sel.innerHTML = '';
   if (includeConst) {
@@ -313,13 +345,17 @@ function buildColOptions(sel, includeConst = false) {
 }
 
 function populateDropdowns() {
+  // 既存指標追加ドロップダウン
   const ms = document.getElementById('metric-select');
   ms.innerHTML = '<option value="">列を選択...</option>';
   buildColOptions(ms);
+
+  // カスタム計算式 左右オペランド
   buildColOptions(document.getElementById('formula-left'));
   buildColOptions(document.getElementById('formula-right'), true);
 }
 
+// ===== 検索 =====
 function initSearch() {
   const input = document.getElementById('co-search');
   const dd    = document.getElementById('co-dropdown');
@@ -355,6 +391,7 @@ function initSearch() {
     if (e.key === 'Enter' && pendingCode) { addCompany(pendingCode); input.value = ''; pendingCode = null; }
   });
 
+  // 既存指標追加
   document.getElementById('metric-add-btn').addEventListener('click', () => {
     const val = document.getElementById('metric-select').value;
     if (!val) return;
@@ -365,19 +402,20 @@ function initSearch() {
     document.getElementById('metric-select').value = '';
   });
 
+  // カスタム計算式: 右辺が定数のとき数値入力を表示
   document.getElementById('formula-right').addEventListener('change', function() {
     document.getElementById('formula-right-const').style.display =
       this.value === '__const__' ? 'inline-block' : 'none';
   });
 
+  // カスタム計算式を追加
   document.getElementById('formula-add-btn').addEventListener('click', () => {
     const label = document.getElementById('formula-name').value.trim();
     if (!label) { alert('指標名を入力してください'); return; }
 
     const leftVal = document.getElementById('formula-left').value;
     if (!leftVal) { alert('左辺の列を選択してください'); return; }
-    const leftSrc = leftVal.slice(0, leftVal.indexOf(':'));
-    const leftKey = leftVal.slice(leftVal.indexOf(':')+1);
+    const [leftSrc, leftKey] = [leftVal.slice(0, leftVal.indexOf(':')), leftVal.slice(leftVal.indexOf(':')+1)];
 
     const op = document.getElementById('formula-op').value;
 
@@ -388,8 +426,7 @@ function initSearch() {
       if (!isFinite(cv)) { alert('定数を入力してください'); return; }
       rightConst = cv;
     } else {
-      rightSrc = rightVal.slice(0, rightVal.indexOf(':'));
-      rightKey = rightVal.slice(rightVal.indexOf(':')+1);
+      [rightSrc, rightKey] = [rightVal.slice(0, rightVal.indexOf(':')), rightVal.slice(rightVal.indexOf(':')+1)];
     }
 
     const pct = document.getElementById('formula-pct').checked;
@@ -399,6 +436,7 @@ function initSearch() {
   });
 }
 
+// ===== 企業管理 =====
 function addCompany(code) {
   if (selectedCodes.includes(code)) return;
   if (selectedCodes.length >= 8) { alert('最大8社まで追加できます'); return; }
@@ -420,10 +458,12 @@ function renderChips() {
   }).join('');
 }
 
+// ===== カスタム指標の計算 =====
 function evalCustom(m, code) {
   const leftRow = m.leftSrc === 'pl' ? plData[code] : bsData[code];
   const left = parseFloat(leftRow?.[m.leftKey]);
   if (!isFinite(left)) return null;
+
   let right;
   if (m.rightConst !== null) {
     right = m.rightConst;
@@ -432,6 +472,7 @@ function evalCustom(m, code) {
     right = parseFloat(rightRow?.[m.rightKey]);
     if (!isFinite(right)) return null;
   }
+
   switch (m.op) {
     case '+': return left + right;
     case '-': return left - right;
@@ -441,12 +482,14 @@ function evalCustom(m, code) {
   return null;
 }
 
+// ===== テーブル描画 =====
 function renderTable() {
   const empty = document.getElementById('empty-state');
   const wrap  = document.getElementById('table-wrap');
   if (!selectedCodes.length) { empty.style.display = 'block'; wrap.style.display = 'none'; return; }
   empty.style.display = 'none'; wrap.style.display = 'block';
 
+  // ヘッダー
   const head = document.getElementById('t-head');
   head.innerHTML = '';
   const trH = document.createElement('tr');
@@ -472,9 +515,12 @@ function renderTable() {
   });
   head.appendChild(trH);
 
+  // ボディ
   const body = document.getElementById('t-body');
   body.innerHTML = '';
+
   metrics.forEach((m, idx) => {
+    // 各社の値を取得
     const rawVals = selectedCodes.map(code => {
       if (m.type === 'col') {
         const row = m.source === 'pl' ? plData[code] : bsData[code];
@@ -503,7 +549,10 @@ function renderTable() {
 
     rawVals.forEach((raw, i) => {
       const td  = document.createElement('td');
-      const fmt = m.type === 'col' ? fmtVal(m.key, raw) : fmtCustom(raw, m.pct);
+      const fmt = m.type === 'col'
+        ? fmtVal(m.key, raw)
+        : fmtCustom(raw, m.pct);
+
       if (fmt === null) {
         td.innerHTML = `<div class="val-cell val-na">—</div>`;
       } else {
