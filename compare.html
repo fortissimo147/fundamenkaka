@@ -31,7 +31,16 @@ header p { font-size: 12px; color: #888; margin-top: 2px; }
 .date-wrap label { font-size: 11px; color: #888; white-space: nowrap; }
 #as-of-date { font-size: 12px; border: 0.5px solid #e0ddd8; border-radius: 7px; padding: 6px 10px; outline: none; background: #fff; color: #1a1a1a; cursor: pointer; }
 #as-of-date:focus { border-color: #888; }
-.data-status { font-size: 10px; color: #bbb; margin-top: 5px; }
+
+/* 追加済み企業チップ */
+.chips-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; min-height: 0; }
+.co-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; background: #f8f7f4; border: 0.5px solid #e0ddd8; border-radius: 20px; padding: 4px 10px; }
+.co-chip-name { color: #1a1a1a; }
+.co-chip-code { color: #aaa; font-size: 10px; }
+.co-chip-del { background: none; border: none; cursor: pointer; color: #bbb; font-size: 14px; line-height: 1; padding: 0; margin-left: 2px; }
+.co-chip-del:hover { color: #E24B4A; }
+
+.data-status { font-size: 10px; color: #bbb; margin-top: 6px; }
 
 /* ===== テーブル ===== */
 .table-card { background: #fff; border: 0.5px solid #e0ddd8; border-radius: 10px; overflow: hidden; }
@@ -41,33 +50,26 @@ table { border-collapse: collapse; width: 100%; }
 th, td { border-bottom: 0.5px solid #e0ddd8; vertical-align: top; }
 tr:last-child td { border-bottom: none; }
 
-/* 指標列（固定） */
 .col-label { position: sticky; left: 0; z-index: 2; background: #fff; min-width: 150px; width: 150px; }
 .col-label-head { padding: 10px 12px; font-size: 11px; color: #888; background: #f8f7f4; border-bottom: 0.5px solid #e0ddd8; }
 .col-label-cell { padding: 9px 12px; font-size: 12px; color: #555; display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 38px; }
 .metric-del { background: none; border: none; color: #d0cdc8; cursor: pointer; font-size: 13px; line-height: 1; flex-shrink: 0; }
 .metric-del:hover { color: #E24B4A; }
 
-/* 企業列 */
 .col-co { min-width: 140px; }
 .co-head { padding: 10px 12px; background: #f8f7f4; border-bottom: 0.5px solid #e0ddd8; }
-.co-head-top { display: flex; align-items: flex-start; justify-content: space-between; }
 .co-code-h { font-size: 11px; color: #888; }
 .co-name-h { font-size: 12px; font-weight: 500; margin-top: 2px; line-height: 1.4; }
 .co-tag-h { font-size: 10px; color: #27500A; background: #EAF3DE; border-radius: 4px; padding: 2px 6px; margin-top: 5px; display: inline-block; }
 .co-fy-h { font-size: 10px; color: #aaa; display: block; margin-top: 4px; }
 .co-link-h { font-size: 10px; color: #378ADD; text-decoration: none; display: block; margin-top: 4px; }
 .co-link-h:hover { text-decoration: underline; }
-.co-del { background: none; border: none; color: #d0cdc8; cursor: pointer; font-size: 15px; line-height: 1; flex-shrink: 0; }
-.co-del:hover { color: #E24B4A; }
 
-/* 値セル */
 .val-cell { padding: 8px 12px; font-size: 13px; text-align: right; min-height: 38px; display: flex; align-items: center; justify-content: flex-end; }
 .val-best { color: #27500A; font-weight: 600; }
 .val-worst { color: #C0392B; }
 .val-na { color: #ccc; font-size: 11px; }
 
-/* 指標追加行 */
 .add-metric-row { padding: 8px 12px; border-top: 0.5px solid #e0ddd8; display: flex; align-items: center; gap: 8px; background: #fff; }
 #metric-select { font-size: 12px; border: 0.5px solid #e0ddd8; border-radius: 6px; padding: 5px 8px; background: #fff; color: #1a1a1a; outline: none; cursor: pointer; max-width: 240px; }
 #metric-add-btn { font-size: 12px; background: none; border: 0.5px solid #e0ddd8; border-radius: 6px; padding: 5px 12px; cursor: pointer; color: #555; white-space: nowrap; }
@@ -95,6 +97,7 @@ tr:last-child td { border-bottom: none; }
         <input type="date" id="as-of-date">
       </div>
     </div>
+    <div class="chips-row" id="chips-row"></div>
     <div class="data-status" id="data-status">データ読み込み中...</div>
   </div>
 
@@ -120,6 +123,7 @@ let plHeaders = [], bsHeaders = [];
 let selectedCodes = [];
 let selectedMetrics = [];
 let pendingCode = null;
+let dateColPL = '', dateColBS = '';
 
 const DEFAULT_METRICS = [
   {key:'売上高',       source:'pl'},
@@ -132,34 +136,44 @@ const DEFAULT_METRICS = [
 ];
 
 const LOWER_BETTER = new Set(['固定比率','固定長期適合率','負債比率','有利子負債比率']);
-const SKIP_COLS = new Set(['コード','会社名','銘柄名','市場','業種','決算期','決算月','上場','証券コード','','ティッカー']);
+const SKIP_COLS = new Set(['コード','会社名','銘柄名','市場','業種','決算期','決算月','上場','証券コード','','ティッカー','年度','期末','決算年月']);
+const DATE_COL_CANDIDATES = ['決算期','期末','決算年月','年度','決算月'];
+
+function detectDateCol(headers) {
+  for (const c of DATE_COL_CANDIDATES) {
+    if (headers.includes(c)) return c;
+  }
+  return '';
+}
 
 function parseFiscalDate(str) {
   if (!str) return null;
   const m = str.match(/(\d{4})[\/\-](\d{1,2})/);
   if (!m) return null;
-  const year = parseInt(m[1]), month = parseInt(m[2]);
-  return new Date(year, month, 0);
+  return new Date(parseInt(m[1]), parseInt(m[2]), 0);
 }
 
-function getRowAsOf(rows, asOf) {
+function getRowAsOf(rows, dateCol, asOf) {
   if (!rows || !rows.length) return null;
-  const candidates = rows
-    .map(r => ({ r, d: parseFiscalDate(r['決算期']) }))
-    .filter(x => x.d && x.d <= asOf)
-    .sort((a, b) => b.d - a.d);
-  return candidates.length ? candidates[0] : null;
+  if (!dateCol) return { r: rows[rows.length - 1], d: null };
+
+  const withDates = rows
+    .map(r => ({ r, d: parseFiscalDate(r[dateCol]) }))
+    .filter(x => x.d);
+
+  if (!withDates.length) return { r: rows[rows.length - 1], d: null };
+
+  const before = withDates.filter(x => x.d <= asOf).sort((a,b) => b.d - a.d);
+  if (before.length) return before[0];
+
+  return withDates.sort((a,b) => a.d - b.d)[0];
 }
 
 function isRatioCol(key) {
   return /比率|ROE|ROA|ROIC|利回り|率$|マージン/i.test(key);
 }
-function isPerShareCol(key) {
-  return /EPS|BPS|DPS|一株/.test(key);
-}
-function isPERPBR(key) {
-  return /^(PER|PBR|PSR|PCR)$/.test(key);
-}
+function isPerShareCol(key) { return /EPS|BPS|DPS|一株/.test(key); }
+function isPERPBR(key)      { return /^(PER|PBR|PSR|PCR)$/.test(key); }
 
 function fmtVal(key, raw) {
   if (raw === '' || raw === '-' || raw === 'NaN' || raw == null) return null;
@@ -177,8 +191,7 @@ function fmtVal(key, raw) {
 
 async function loadData() {
   const status = document.getElementById('data-status');
-  const today = new Date().toISOString().slice(0, 10);
-  document.getElementById('as-of-date').value = today;
+  document.getElementById('as-of-date').value = new Date().toISOString().slice(0,10);
 
   try {
     const cRes = await fetch('data/companies.csv');
@@ -204,11 +217,11 @@ async function loadData() {
         fetch(`data/${snap}/fy-profit-and-loss.csv`),
         fetch(`data/${snap}/fy-balance-sheet.csv`)
       ]);
-      if (plRes.ok) { const r = parseIRBankCSV(await plRes.text()); plAllData = r.data; plHeaders = r.headers; }
-      if (bsRes.ok) { const r = parseIRBankCSV(await bsRes.text()); bsAllData = r.data; bsHeaders = r.headers; }
+      if (plRes.ok) { const r = parseIRBankCSV(await plRes.text()); plAllData = r.data; plHeaders = r.headers; dateColPL = detectDateCol(r.headers); }
+      if (bsRes.ok) { const r = parseIRBankCSV(await bsRes.text()); bsAllData = r.data; bsHeaders = r.headers; dateColBS = detectDateCol(r.headers); }
       const coCount = Object.keys(plAllData).length;
-      const sampleRows = Object.values(plAllData)[0] || [];
-      status.textContent = `IRBankデータ: ${snap}　${coCount}社　${sampleRows.length}期分`;
+      const sample  = Object.values(plAllData)[0] || [];
+      status.textContent = `IRBankデータ: ${snap}　${coCount}社　${sample.length}期分　日付列: ${dateColPL||'不明'}`;
       populateDropdown();
       initDefaultMetrics();
     } else {
@@ -223,10 +236,7 @@ async function loadData() {
 function parseCompanies(text) {
   const lines = text.replace(/^﻿/, '').split('\n');
   const h = lines[0].split(',').map(x => x.trim());
-  const idx = {
-    code: h.indexOf('コード'), name: h.indexOf('銘柄名'),
-    market: h.indexOf('市場・商品区分'), s33n: h.indexOf('33業種区分')
-  };
+  const idx = { code: h.indexOf('コード'), name: h.indexOf('銘柄名'), market: h.indexOf('市場・商品区分'), s33n: h.indexOf('33業種区分') };
   companies = [];
   for (let r = 1; r < lines.length; r++) {
     const c = lines[r].split(',');
@@ -244,7 +254,7 @@ function parseIRBankCSV(text) {
   for (let i = 0; i < Math.min(lines.length, 8); i++) {
     if (lines[i].startsWith('コード')) { hi = i; break; }
   }
-  if (hi < 0) return {data: {}, headers: []};
+  if (hi < 0) return {data:{}, headers:[]};
   const headers = lines[hi].split(',').map(h => h.trim());
   const data = {};
   for (let i = hi + 1; i < lines.length; i++) {
@@ -252,7 +262,7 @@ function parseIRBankCSV(text) {
     const code = cols[0]?.trim();
     if (!code) continue;
     const row = {};
-    headers.forEach((h, j) => { row[h] = cols[j]?.trim() || ''; });
+    headers.forEach((h,j) => { row[h] = cols[j]?.trim() || ''; });
     if (!data[code]) data[code] = [];
     data[code].push(row);
   }
@@ -293,7 +303,7 @@ function initSearch() {
   input.addEventListener('input', () => {
     const q = input.value.trim();
     if (!q) { dd.style.display='none'; pendingCode=null; return; }
-    const hits = companies.filter(c => c.code.startsWith(q) || c.name.includes(q)).slice(0, 25);
+    const hits = companies.filter(c => c.code.startsWith(q) || c.name.includes(q)).slice(0,25);
     if (!hits.length) { dd.style.display='none'; return; }
     dd.innerHTML = hits.map(c =>
       `<div class="co-item" data-code="${c.code}">
@@ -329,9 +339,7 @@ function initSearch() {
   });
 
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && pendingCode) {
-      addCompany(pendingCode); input.value=''; pendingCode=null;
-    }
+    if (e.key === 'Enter' && pendingCode) { addCompany(pendingCode); input.value=''; pendingCode=null; }
   });
 
   document.getElementById('as-of-date').addEventListener('change', () => {
@@ -342,9 +350,8 @@ function initSearch() {
     const val = document.getElementById('metric-select').value;
     if (!val) return;
     const sep = val.indexOf(':');
-    const source = val.slice(0, sep);
-    const key    = val.slice(sep + 1);
-    if (!selectedMetrics.find(m => m.key === key && m.source === source)) {
+    const source = val.slice(0, sep), key = val.slice(sep+1);
+    if (!selectedMetrics.find(m => m.key===key && m.source===source)) {
       selectedMetrics.push({key, source});
       renderTable();
     }
@@ -356,45 +363,57 @@ function addCompany(code) {
   if (selectedCodes.includes(code)) return;
   if (selectedCodes.length >= 8) { alert('最大8社まで追加できます'); return; }
   selectedCodes.push(code);
+  renderChips();
   renderTable();
 }
 
 function removeCompany(code) {
   selectedCodes = selectedCodes.filter(c => c !== code);
+  renderChips();
   renderTable();
 }
 
 function removeMetric(key, source) {
-  selectedMetrics = selectedMetrics.filter(m => !(m.key === key && m.source === source));
+  selectedMetrics = selectedMetrics.filter(m => !(m.key===key && m.source===source));
   renderTable();
+}
+
+function renderChips() {
+  const row = document.getElementById('chips-row');
+  if (!selectedCodes.length) { row.innerHTML = ''; return; }
+  row.innerHTML = selectedCodes.map(code => {
+    const co = companies.find(c => c.code === code);
+    return `<div class="co-chip">
+      <span class="co-chip-code">${code}</span>
+      <span class="co-chip-name">${co?.name || ''}</span>
+      <button class="co-chip-del" onclick="removeCompany('${code}')" title="削除">×</button>
+    </div>`;
+  }).join('');
 }
 
 function renderTable() {
   const empty = document.getElementById('empty-state');
   const wrap  = document.getElementById('table-wrap');
-  if (selectedCodes.length === 0) {
-    empty.style.display = 'block'; wrap.style.display = 'none'; return;
-  }
+  if (!selectedCodes.length) { empty.style.display='block'; wrap.style.display='none'; return; }
   empty.style.display = 'none'; wrap.style.display = 'block';
 
-  const asOf = new Date(document.getElementById('as-of-date').value);
+  const asOf = new Date(document.getElementById('as-of-date').value + 'T23:59:59');
 
   const coRows = {};
   selectedCodes.forEach(code => {
     coRows[code] = {
-      pl: getRowAsOf(plAllData[code] || [], asOf),
-      bs: getRowAsOf(bsAllData[code] || [], asOf),
+      pl: getRowAsOf(plAllData[code]||[], dateColPL, asOf),
+      bs: getRowAsOf(bsAllData[code]||[], dateColBS, asOf),
     };
   });
 
   const head = document.getElementById('t-head');
   head.innerHTML = '';
   const trH = document.createElement('tr');
-
-  const thLabel = document.createElement('th');
-  thLabel.className = 'col-label';
-  thLabel.innerHTML = `<div class="col-label-head">指標</div>`;
-  trH.appendChild(thLabel);
+  const thL = document.createElement('th');
+  thL.className = 'col-label';
+  thL.innerHTML = `<div class="col-label-head">指標</div>`;
+  trH.appendChild(thL);
 
   selectedCodes.forEach(code => {
     const co  = companies.find(c => c.code === code);
@@ -404,16 +423,11 @@ function renderTable() {
     th.className = 'col-co';
     th.innerHTML = `
       <div class="co-head">
-        <div class="co-head-top">
-          <div>
-            <div class="co-code-h">${code}</div>
-            <div class="co-name-h">${co?.name || ''}</div>
-            ${co?.s33n && co.s33n !== '-' ? `<span class="co-tag-h">${co.s33n}</span>` : ''}
-            <span class="co-fy-h">決算期: ${fyStr}</span>
-            <a class="co-link-h" href="https://irbank.net/${code}" target="_blank" rel="noopener">IRBankで見る →</a>
-          </div>
-          <button class="co-del" onclick="removeCompany('${code}')">×</button>
-        </div>
+        <div class="co-code-h">${code}</div>
+        <div class="co-name-h">${co?.name||''}</div>
+        ${co?.s33n && co.s33n!=='-' ? `<span class="co-tag-h">${co.s33n}</span>` : ''}
+        <span class="co-fy-h">決算期: ${fyStr}</span>
+        <a class="co-link-h" href="https://irbank.net/${code}" target="_blank" rel="noopener">IRBankで見る →</a>
       </div>`;
     trH.appendChild(th);
   });
@@ -421,45 +435,36 @@ function renderTable() {
 
   const body = document.getElementById('t-body');
   body.innerHTML = '';
-
   selectedMetrics.forEach(m => {
     const rawVals = selectedCodes.map(code => {
-      const entry = m.source === 'pl' ? coRows[code].pl : coRows[code].bs;
+      const entry = m.source==='pl' ? coRows[code].pl : coRows[code].bs;
       return entry?.r?.[m.key] ?? '';
     });
     const nums   = rawVals.map(v => parseFloat(v));
     const valids = nums.filter(v => isFinite(v));
     const maxV   = valids.length ? Math.max(...valids) : null;
     const minV   = valids.length ? Math.min(...valids) : null;
-    const lowerBetter = LOWER_BETTER.has(m.key);
+    const lower  = LOWER_BETTER.has(m.key);
 
     const tr = document.createElement('tr');
+    const tdL = document.createElement('td');
+    tdL.className = 'col-label';
+    const ek = m.key.replace(/'/g,"\\'"), es = m.source.replace(/'/g,"\\'");
+    tdL.innerHTML = `<div class="col-label-cell"><span>${m.key}</span><button class="metric-del" onclick="removeMetric('${ek}','${es}')">×</button></div>`;
+    tr.appendChild(tdL);
 
-    const tdLabel = document.createElement('td');
-    tdLabel.className = 'col-label';
-    const ek = m.key.replace(/'/g, "\\'");
-    const es = m.source.replace(/'/g, "\\'");
-    tdLabel.innerHTML = `
-      <div class="col-label-cell">
-        <span>${m.key}</span>
-        <button class="metric-del" onclick="removeMetric('${ek}','${es}')">×</button>
-      </div>`;
-    tr.appendChild(tdLabel);
-
-    rawVals.forEach((raw, i) => {
+    rawVals.forEach((raw,i) => {
       const td = document.createElement('td');
-      const formatted = fmtVal(m.key, raw);
-      if (formatted === null) {
+      const fmt = fmtVal(m.key, raw);
+      if (fmt === null) {
         td.innerHTML = `<div class="val-cell val-na">—</div>`;
       } else {
         let cls = 'val-cell';
         if (valids.length > 1 && isFinite(nums[i])) {
-          const best  = lowerBetter ? (nums[i] === minV) : (nums[i] === maxV);
-          const worst = lowerBetter ? (nums[i] === maxV) : (nums[i] === minV);
-          if (best)  cls += ' val-best';
-          else if (worst) cls += ' val-worst';
+          if (lower ? nums[i]===minV : nums[i]===maxV) cls += ' val-best';
+          else if (lower ? nums[i]===maxV : nums[i]===minV) cls += ' val-worst';
         }
-        td.innerHTML = `<div class="${cls}">${formatted}</div>`;
+        td.innerHTML = `<div class="${cls}">${fmt}</div>`;
       }
       tr.appendChild(td);
     });
