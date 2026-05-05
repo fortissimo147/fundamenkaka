@@ -1,41 +1,3 @@
-name: IRBankデータ更新
-
-on:
-  schedule:
-    - cron: '0 1 1 * *'  # 毎月1日 AM1:00 UTC
-  workflow_dispatch:       # 手動実行も可能
-
-permissions:
-  contents: write
-
-jobs:
-  update-data:
-    runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
-    steps:
-      - uses: actions/checkout@v4
-
-      # ── index.html用: 月次スナップショット ──────────────────────────────
-      - name: 月次CSVダウンロード (index.html用)
-        run: |
-          DATE=$(date +'%Y-%m')
-          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-          mkdir -p data/$DATE
-
-          HTTP=$(curl -s -o data/$DATE/fy-balance-sheet.csv -w "%{http_code}" \
-            -L -A "${UA}" -H "Referer: https://irbank.net/" \
-            https://f.irbank.net/files/0000/fy-balance-sheet.csv)
-          echo "BS HTTP: ${HTTP}"
-          [ "${HTTP}" = "200" ] || echo "WARNING: BS download returned ${HTTP}"
-
-          HTTP=$(curl -s -o data/$DATE/fy-profit-and-loss.csv -w "%{http_code}" \
-            -L -A "${UA}" -H "Referer: https://irbank.net/" \
-            https://f.irbank.net/files/0000/fy-profit-and-loss.csv)
-          echo "PL HTTP: ${HTTP}"
-          [ "${HTTP}" = "200" ] || echo "WARNING: PL download returned ${HTTP}"
-
       # ── compare.html用: 年別CSVダウンロード (既存年: 2013-2016) ─────────
       - name: 年別CSVダウンロード (compare.html用)
         run: |
@@ -48,133 +10,51 @@ jobs:
             mkdir -p "${OUTDIR}"
             echo "=== Trying ${YEAR} ==="
 
-            # 複数URLパターンを試す
+            # 複数URLパターンを試す (一時ファイルに落として成功時のみ置換)
             PL_OK=0
             for URL_PL in \
               "${BASE}/00${YY}/fy-profit-and-loss.csv" \
               "${BASE}/${YEAR}/fy-profit-and-loss.csv" \
               "${BASE}/00${YY}/pl.csv"; do
-              HTTP=$(curl -s -o "${OUTDIR}/pl.csv" -w "%{http_code}" \
+              HTTP=$(curl -s -o "${OUTDIR}/pl.csv.tmp" -w "%{http_code}" \
                 -L -A "${UA}" -H "Referer: https://irbank.net/" "${URL_PL}")
               echo "  PL ${URL_PL} -> HTTP ${HTTP}"
-              if [ "${HTTP}" = "200" ] && [ -s "${OUTDIR}/pl.csv" ]; then
-                # 先頭がHTMLでないか確認
-                if ! head -c 20 "${OUTDIR}/pl.csv" | grep -q "<!DOCTYPE\|<html"; then
-                  echo "  PL OK"
+              if [ "${HTTP}" = "200" ] && [ -s "${OUTDIR}/pl.csv.tmp" ]; then
+                if ! head -c 20 "${OUTDIR}/pl.csv.tmp" | grep -q "<!DOCTYPE\|<html"; then
+                  mv "${OUTDIR}/pl.csv.tmp" "${OUTDIR}/pl.csv"
+                  echo "  PL OK ($(wc -l < "${OUTDIR}/pl.csv") lines)"
                   PL_OK=1
                   break
+                else
+                  echo "  PL got HTML: $(head -c 80 "${OUTDIR}/pl.csv.tmp")"
                 fi
               fi
-              rm -f "${OUTDIR}/pl.csv"
+              rm -f "${OUTDIR}/pl.csv.tmp"
             done
+            if [ "${PL_OK}" = "0" ] && [ -f "${OUTDIR}/pl.csv" ]; then
+              echo "  PL: keeping existing file ($(wc -l < "${OUTDIR}/pl.csv") lines)"
+            fi
 
             BS_OK=0
             for URL_BS in \
               "${BASE}/00${YY}/fy-balance-sheet.csv" \
               "${BASE}/${YEAR}/fy-balance-sheet.csv" \
               "${BASE}/00${YY}/bs.csv"; do
-              HTTP=$(curl -s -o "${OUTDIR}/bs.csv" -w "%{http_code}" \
+              HTTP=$(curl -s -o "${OUTDIR}/bs.csv.tmp" -w "%{http_code}" \
                 -L -A "${UA}" -H "Referer: https://irbank.net/" "${URL_BS}")
               echo "  BS ${URL_BS} -> HTTP ${HTTP}"
-              if [ "${HTTP}" = "200" ] && [ -s "${OUTDIR}/bs.csv" ]; then
-                if ! head -c 20 "${OUTDIR}/bs.csv" | grep -q "<!DOCTYPE\|<html"; then
-                  echo "  BS OK"
+              if [ "${HTTP}" = "200" ] && [ -s "${OUTDIR}/bs.csv.tmp" ]; then
+                if ! head -c 20 "${OUTDIR}/bs.csv.tmp" | grep -q "<!DOCTYPE\|<html"; then
+                  mv "${OUTDIR}/bs.csv.tmp" "${OUTDIR}/bs.csv"
+                  echo "  BS OK ($(wc -l < "${OUTDIR}/bs.csv") lines)"
                   BS_OK=1
                   break
+                else
+                  echo "  BS got HTML: $(head -c 80 "${OUTDIR}/bs.csv.tmp")"
                 fi
               fi
-              rm -f "${OUTDIR}/bs.csv"
+              rm -f "${OUTDIR}/bs.csv.tmp"
             done
-
-            [ "${PL_OK}" = "0" ] && echo "  PL FAILED for ${YEAR}"
-            [ "${BS_OK}" = "0" ] && echo "  BS FAILED for ${YEAR}"
-          done
-
-      # ── 0000ファイルを年別に分割 (2017-2025をカバー) ────────────────────
-      - name: 0000ファイルを年別に分割
-        run: |
-          DATE=$(date +'%Y-%m')
-          python3 << 'EOF'
-          import os, sys
-
-          def split_by_year(src, dst_base, filename):
-              if not os.path.exists(src):
-                  print(f"SKIP: {src} not found")
-                  return
-              with open(src, encoding='utf-8-sig', errors='replace') as f:
-                  lines = f.readlines()
-
-              # ヘッダー行を探す
-              hi = -1
-              preamble = []
-              for i, line in enumerate(lines[:8]):
-                  if line.startswith('コード'):
-                      hi = i
-                      break
-                  preamble.append(line)
-              if hi < 0:
-                  print(f"No header in {src}")
-                  return
-
-              headers = lines[hi].rstrip('\n').split(',')
-              try:
-                  yi = headers.index('年度')
-              except ValueError:
-                  print(f"No 年度 column in {src}")
-                  return
-
-              year_rows = {}
-              for line in lines[hi+1:]:
-                  cols = line.split(',')
-                  if not cols[0].strip() or len(cols[0].strip()) < 4:
-                      continue
-                  fy = cols[yi].strip() if yi < len(cols) else ''
-                  year = fy.split('/')[0] if '/' in fy else fy[:4]
-                  if not year.isdigit() or len(year) != 4:
-                      continue
-                  year_rows.setdefault(year, []).append(line)
-
-              print(f"Years found in {src}: {sorted(year_rows.keys())}")
-              for year, rows in year_rows.items():
-                  outdir = f"{dst_base}/{year}"
-                  outpath = f"{outdir}/{filename}"
-                  os.makedirs(outdir, exist_ok=True)
-                  if os.path.exists(outpath):
-                      print(f"  SKIP {outpath} (CDN file takes priority)")
-                      continue
-                  with open(outpath, 'w', encoding='utf-8') as f:
-                      f.writelines(preamble)
-                      f.write(lines[hi])
-                      f.writelines(rows)
-                  print(f"  Wrote {len(rows)} rows -> {outpath}")
-
-          import os as _os
-          date_dirs = sorted([d for d in _os.listdir('data') if '-' in d], reverse=True)
-          latest = date_dirs[0] if date_dirs else None
-          if latest:
-              split_by_year(f'data/{latest}/fy-profit-and-loss.csv', 'data', 'pl.csv')
-              split_by_year(f'data/{latest}/fy-balance-sheet.csv',   'data', 'bs.csv')
-          else:
-              print("No monthly snapshot found")
-          EOF
-
-      # ── manifest.json 更新 ───────────────────────────────────────────────
-      - name: manifest.json 更新
-        run: |
-          DATE=$(date +'%Y-%m')
-          # pl.csvが存在する全年をリストアップ（行数問わず）
-          YEARS_WITH_DATA=$(find data/ -mindepth 2 -name "pl.csv" \
-            | sed 's|data/||;s|/pl.csv||' | grep -E '^[0-9]{4}$' | sort -n)
-          LATEST_YEAR=$(echo "$YEARS_WITH_DATA" | tail -1)
-          ALL_JSON=$(echo "$YEARS_WITH_DATA" | grep . | jq -R . | jq -s .)
-          echo "{\"latest\":\"${DATE}\",\"latest_year\":\"${LATEST_YEAR}\",\"years\":${ALL_JSON}}" \
-            > data/manifest.json
-          cat data/manifest.json
-
-      - name: コミット・プッシュ
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/
-          git diff --staged --quiet || git commit -m "データ更新: $(date +'%Y年%m月')"
-          git push
+            if [ "${BS_OK}" = "0" ] && [ -f "${OUTDIR}/bs.csv" ]; then
+              echo "  BS: keeping existing file ($(wc -l < "${OUTDIR}/bs.csv") lines)"
+            fi
