@@ -2,8 +2,8 @@ name: IRBankデータ更新
 
 on:
   schedule:
-    - cron: '0 1 1 * *'
-  workflow_dispatch:
+    - cron: '0 1 1 * *'  # 毎月1日 AM1:00 UTC
+  workflow_dispatch:       # 手動実行も可能
 
 permissions:
   contents: write
@@ -15,45 +15,82 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Python依存ライブラリ
-        run: pip install pandas openpyxl xlrd
-
-      - name: IRBank CSVダウンロード
+      # ── index.html用: 月次スナップショット ──────────────────────────────
+      - name: 月次CSVダウンロード (index.html用)
         run: |
           DATE=$(date +'%Y-%m')
           mkdir -p data/$DATE
-          curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
+          curl -f -L \
+            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
             -o data/$DATE/fy-balance-sheet.csv \
             https://f.irbank.net/files/0000/fy-balance-sheet.csv
-          curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
+          curl -f -L \
+            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
             -o data/$DATE/fy-profit-and-loss.csv \
             https://f.irbank.net/files/0000/fy-profit-and-loss.csv
 
-      - name: JPX銘柄マスタ取得・変換
+      # ── compare.html用: 年別CSVダウンロード (2013-2025) ─────────────────
+      - name: 年別CSVダウンロード (compare.html用)
         run: |
-          curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-            -o /tmp/data_j.xls \
-            "https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xls"
-          python3 - <<'EOF'
-          import pandas as pd
-          df = pd.read_excel('/tmp/data_j.xls', dtype=str)
-          cols = ['コード', '銘柄名', '市場・商品区分', '33業種コード', '33業種区分']
-          df = df[[c for c in cols if c in df.columns]]
-          df.to_csv('data/companies.csv', index=False, encoding='utf-8-sig')
-          EOF
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"
 
-      - name: マニフェスト更新
+          for YEAR in $(seq 2013 2025); do
+            OUTDIR="data/${YEAR}"
+            # すでにPL・BS両方あればスキップ
+            if [ -f "${OUTDIR}/pl.csv" ] && [ -f "${OUTDIR}/bs.csv" ]; then
+              echo "SKIP: ${YEAR} already exists"
+              continue
+            fi
+
+            YY=$(printf "%02d" $((YEAR % 100)))
+            CODE="00${YY}"
+            URL="https://irbank.net/download/${CODE}"
+            echo "=== Downloading ${YEAR} (${URL}) ==="
+            mkdir -p "${OUTDIR}"
+            mkdir -p /tmp/irbank_${YEAR}
+
+            HTTP=$(curl -s -o /tmp/irbank_${YEAR}/archive.zip -w "%{http_code}" \
+              -L -A "${UA}" \
+              -H "Referer: https://irbank.net/" \
+              "${URL}")
+            echo "HTTP status: ${HTTP}"
+            if [ "${HTTP}" != "200" ]; then
+              echo "SKIP: ${YEAR} returned ${HTTP}"
+              continue
+            fi
+
+            echo "--- ZIP contents ---"
+            unzip -l /tmp/irbank_${YEAR}/archive.zip
+
+            unzip -o /tmp/irbank_${YEAR}/archive.zip -d /tmp/irbank_${YEAR}/extracted/ 2>/dev/null || true
+
+            echo "--- Extracted files ---"
+            find /tmp/irbank_${YEAR}/extracted/ -type f | sort
+
+            # 全CSVをそのままコピー（ファイル名を保持）
+            find /tmp/irbank_${YEAR}/extracted/ -type f -name "*.csv" | while read f; do
+              cp "${f}" "${OUTDIR}/$(basename ${f})"
+            done
+
+            # PL・BSをpl.csv/bs.csvという名前でも保存
+            PL=$(find /tmp/irbank_${YEAR}/extracted/ -type f \( \
+              -iname "*profit*loss*" -o -iname "*損益*" -o -iname "*pl*" \) | head -1)
+            [ -n "${PL}" ] && cp "${PL}" "${OUTDIR}/pl.csv" && echo "PL -> ${OUTDIR}/pl.csv"
+
+            BS=$(find /tmp/irbank_${YEAR}/extracted/ -type f \( \
+              -iname "*balance*sheet*" -o -iname "*貸借*" -o -iname "*bs*" \) | head -1)
+            [ -n "${BS}" ] && cp "${BS}" "${OUTDIR}/bs.csv" && echo "BS -> ${OUTDIR}/bs.csv"
+          done
+
+      # ── manifest.json 更新 ───────────────────────────────────────────────
+      - name: manifest.json 更新
         run: |
-          python3 - <<'EOF'
-          import json, os
-          snapshots = sorted([
-            d for d in os.listdir('data')
-            if os.path.isdir(f'data/{d}') and '-' in d and d[:4].isdigit()
-          ])
-          manifest = {"latest": snapshots[-1] if snapshots else "", "snapshots": snapshots}
-          with open('data/manifest.json', 'w') as f:
-            json.dump(manifest, f, ensure_ascii=False)
-          EOF
+          DATE=$(date +'%Y-%m')
+          YEARS_WITH_PL=$(find data/ -mindepth 2 -name "pl.csv" | sed 's|data/||;s|/pl.csv||' | sort -n)
+          LATEST_YEAR=$(echo "$YEARS_WITH_PL" | tail -1)
+          ALL_JSON=$(echo "$YEARS_WITH_PL" | jq -R . | jq -s .)
+          echo "{\"latest\":\"${DATE}\",\"latest_year\":\"${LATEST_YEAR}\",\"years\":${ALL_JSON}}" > data/manifest.json
+          cat data/manifest.json
 
       - name: コミット・プッシュ
         run: |
