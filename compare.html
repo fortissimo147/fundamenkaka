@@ -90,12 +90,9 @@ tr:last-child td { border-bottom: none; }
 </style>
 </head>
 <body>
-<header style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
-  <div>
-    <h1>企業比較</h1>
-    <p>銘柄を追加して財務指標を横並びで比較できます</p>
-  </div>
-  <a href="index.html" style="font-size:12px;color:#378ADD;text-decoration:none;white-space:nowrap;flex-shrink:0;">← ビジュアライザー</a>
+<header>
+  <h1>企業比較</h1>
+  <p>銘柄を追加して財務指標を横並びで比較できます</p>
 </header>
 
 <div class="main">
@@ -105,11 +102,12 @@ tr:last-child td { border-bottom: none; }
         <input id="co-search" type="text" placeholder="銘柄コードまたは会社名を入力" autocomplete="off">
         <div class="co-dropdown" id="co-dropdown"></div>
       </div>
-      <button id="add-co-btn">+ 追加</button>
       <div class="year-wrap">
         <label for="year-select">年度</label>
         <select id="year-select"></select>
       </div>
+      <button id="add-co-btn">+ 追加</button>
+      <a href="index.html" style="margin-left:auto;font-size:12px;color:#378ADD;text-decoration:none;white-space:nowrap;flex-shrink:0;">← ビジュアライザー</a>
     </div>
     <div class="chips-row" id="chips-row"></div>
     <div class="data-status" id="data-status">データ読み込み中...</div>
