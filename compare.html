@@ -1,1 +1,576 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>企業比較 | fundamenkaka</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f8f7f4; color: #1a1a1a; min-height: 100vh; }
+header { padding: 1.25rem 2rem; background: #fff; border-bottom: 0.5px solid #e0ddd8; }
+header h1 { font-size: 16px; font-weight: 500; }
+header p { font-size: 12px; color: #888; margin-top: 2px; }
 
+.main { max-width: 1200px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+
+/* ===== 検索 ===== */
+.search-card { background: #fff; border: 0.5px solid #e0ddd8; border-radius: 10px; padding: 0.875rem 1rem; margin-bottom: 1.25rem; }
+.search-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.search-wrap { position: relative; flex: 0 0 280px; }
+#co-search { width: 100%; font-size: 13px; border: 0.5px solid #e0ddd8; border-radius: 8px; padding: 7px 12px; outline: none; background: #fff; color: #1a1a1a; }
+#co-search:focus { border-color: #888; }
+.co-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #fff; border: 0.5px solid #e0ddd8; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); z-index: 300; max-height: 220px; overflow-y: auto; display: none; }
+.co-item { padding: 8px 12px; font-size: 12px; cursor: pointer; border-bottom: 0.5px solid #f0ede8; display: flex; align-items: center; gap: 6px; }
+.co-item:hover { background: #f8f7f4; }
+.co-item:last-child { border-bottom: none; }
+.co-code-s { color: #888; font-size: 11px; min-width: 36px; flex-shrink: 0; }
+.co-sector-s { color: #999; font-size: 10px; margin-left: auto; white-space: nowrap; }
+#add-co-btn { font-size: 12px; background: #1a1a1a; color: #fff; border: none; border-radius: 7px; padding: 7px 16px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+#add-co-btn:hover { background: #333; }
+.year-wrap { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.year-wrap label { font-size: 11px; color: #888; white-space: nowrap; }
+#year-select { font-size: 12px; border: 0.5px solid #e0ddd8; border-radius: 7px; padding: 6px 10px; outline: none; background: #fff; color: #1a1a1a; cursor: pointer; }
+
+/* 追加済み企業チップ */
+.chips-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.co-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; background: #f8f7f4; border: 0.5px solid #e0ddd8; border-radius: 20px; padding: 4px 10px; }
+.co-chip-name { color: #1a1a1a; }
+.co-chip-code { color: #aaa; font-size: 10px; }
+.co-chip-del { background: none; border: none; cursor: pointer; color: #bbb; font-size: 14px; line-height: 1; padding: 0; margin-left: 2px; }
+.co-chip-del:hover { color: #E24B4A; }
+.data-status { font-size: 10px; color: #bbb; margin-top: 6px; }
+
+/* ===== テーブル ===== */
+.table-card { background: #fff; border: 0.5px solid #e0ddd8; border-radius: 10px; overflow: hidden; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border-bottom: 0.5px solid #e0ddd8; vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+
+.col-label { position: sticky; left: 0; z-index: 2; background: #fff; min-width: 160px; width: 160px; }
+.col-label-head { padding: 10px 12px; font-size: 11px; color: #888; background: #f8f7f4; border-bottom: 0.5px solid #e0ddd8; }
+.col-label-cell { padding: 9px 12px; font-size: 12px; color: #555; display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 38px; }
+.metric-del { background: none; border: none; color: #d0cdc8; cursor: pointer; font-size: 13px; line-height: 1; flex-shrink: 0; }
+.metric-del:hover { color: #E24B4A; }
+.metric-custom-badge { font-size: 9px; color: #888; background: #f0ede8; border-radius: 3px; padding: 1px 4px; flex-shrink: 0; }
+
+.col-co { min-width: 140px; }
+.co-head { padding: 10px 12px; background: #f8f7f4; border-bottom: 0.5px solid #e0ddd8; }
+.co-code-h { font-size: 11px; color: #888; }
+.co-name-h { font-size: 12px; font-weight: 500; margin-top: 2px; line-height: 1.4; }
+.co-tag-h { font-size: 10px; color: #27500A; background: #EAF3DE; border-radius: 4px; padding: 2px 6px; margin-top: 5px; display: inline-block; }
+.co-fy-h { font-size: 10px; color: #aaa; display: block; margin-top: 4px; }
+.co-link-h { font-size: 10px; color: #378ADD; text-decoration: none; display: block; margin-top: 4px; }
+.co-link-h:hover { text-decoration: underline; }
+
+.val-cell { padding: 8px 12px; font-size: 13px; text-align: right; min-height: 38px; display: flex; align-items: center; justify-content: flex-end; }
+.val-best  { color: #27500A; font-weight: 600; }
+.val-worst { color: #C0392B; }
+.val-na    { color: #ccc; font-size: 11px; }
+
+/* ===== 指標追加・カスタム計算式 ===== */
+.add-row { padding: 8px 12px; border-top: 0.5px solid #e0ddd8; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: #fff; }
+.add-row select, .add-row input[type="text"], .add-row input[type="number"] {
+  font-size: 12px; border: 0.5px solid #e0ddd8; border-radius: 6px;
+  padding: 5px 8px; background: #fff; color: #1a1a1a; outline: none;
+}
+.add-row select { cursor: pointer; }
+.add-row button {
+  font-size: 12px; background: none; border: 0.5px solid #e0ddd8;
+  border-radius: 6px; padding: 5px 12px; cursor: pointer; color: #555; white-space: nowrap;
+}
+.add-row button:hover { background: #f8f7f4; }
+.add-row-label { font-size: 11px; color: #aaa; white-space: nowrap; }
+.add-row-sep { width: 100%; height: 0; border-top: 0.5px solid #f0ede8; margin: 2px 0; }
+#formula-right-const { width: 80px; display: none; }
+#formula-name { width: 120px; }
+#metric-select { max-width: 200px; }
+
+.empty-state { padding: 48px; text-align: center; color: #bbb; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>企業比較</h1>
+  <p>銘柄を追加して財務指標を横並びで比較できます</p>
+</header>
+
+<div class="main">
+  <div class="search-card">
+    <div class="search-row">
+      <div class="search-wrap">
+        <input id="co-search" type="text" placeholder="銘柄コードまたは会社名を入力" autocomplete="off">
+        <div class="co-dropdown" id="co-dropdown"></div>
+      </div>
+      <div class="year-wrap">
+        <label for="year-select">年度</label>
+        <select id="year-select"></select>
+      </div>
+      <button id="add-co-btn">+ 追加</button>
+      <a href="index.html" style="margin-left:auto;font-size:12px;color:#378ADD;text-decoration:none;white-space:nowrap;flex-shrink:0;">← ビジュアライザー</a>
+    </div>
+    <div class="chips-row" id="chips-row"></div>
+    <div class="data-status" id="data-status">データ読み込み中...</div>
+  </div>
+
+  <div class="table-card">
+    <div class="empty-state" id="empty-state">銘柄を追加してください</div>
+    <div class="table-wrap" id="table-wrap" style="display:none;">
+      <table>
+        <thead id="t-head"></thead>
+        <tbody id="t-body"></tbody>
+      </table>
+
+      <!-- 既存指標を追加 -->
+      <div class="add-row">
+        <span class="add-row-label">指標追加</span>
+        <select id="metric-select"><option value="">列を選択...</option></select>
+        <button id="metric-add-btn">+ 追加</button>
+      </div>
+
+      <!-- カスタム計算式 -->
+      <div class="add-row">
+        <span class="add-row-label">計算式</span>
+        <input id="formula-name" type="text" placeholder="指標名">
+        <span class="add-row-label">=</span>
+        <select id="formula-left"></select>
+        <select id="formula-op">
+          <option value="÷">÷</option>
+          <option value="×">×</option>
+          <option value="+">+</option>
+          <option value="-">-</option>
+        </select>
+        <select id="formula-right"></select>
+        <input id="formula-right-const" type="number" placeholder="数値">
+        <label style="font-size:11px;color:#888;display:flex;align-items:center;gap:4px;white-space:nowrap;">
+          <input type="checkbox" id="formula-pct"> %表示
+        </label>
+        <button id="formula-add-btn">+ 追加</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let companies  = [];
+let plData = {}, bsData = {};
+let plHeaders = [], bsHeaders = [];
+let allPlData = {}, allBsData = {};  // year → {code → row}
+let selectedCodes   = [];
+let metrics         = [];   // {type:'col',  key, source}
+                             // {type:'custom', label, leftKey, leftSrc, op, rightKey, rightSrc, rightConst, pct}
+let pendingCode     = null;
+let availableYears  = [];
+
+const DEFAULT_METRICS = [
+  {type:'col', key:'売上高',       source:'pl'},
+  {type:'col', key:'営業利益',     source:'pl'},
+  {type:'col', key:'純利益',       source:'pl'},
+  {type:'col', key:'ROE',          source:'pl'},
+  {type:'col', key:'自己資本比率', source:'bs'},
+  {type:'col', key:'純資産',       source:'bs'},
+  {type:'col', key:'総資産',       source:'bs'},
+];
+
+const LOWER_BETTER = new Set(['固定比率','固定長期適合率','負債比率','有利子負債比率']);
+const SKIP_COLS = new Set(['コード','会社名','銘柄名','市場','業種','決算期','決算月',
+  '上場','証券コード','','ティッカー','年度','期末','決算年月','市場・商品区分','33業種区分']);
+
+function isRatioCol(key) { return /比率|ROE|ROA|ROIC|利回り|率$|マージン/i.test(key); }
+function isPerShareCol(key) { return /EPS|BPS|DPS|一株/.test(key); }
+function isPERPBR(key) { return /^(PER|PBR|PSR|PCR)$/.test(key); }
+
+function fmtMoney(v) {
+  const a = Math.abs(v);
+  if (a >= 1e12) return (v / 1e12).toFixed(2) + '兆';
+  if (a >= 1e8)  return Math.round(v / 1e8).toLocaleString() + '億';
+  if (a >= 1e4)  return Math.round(v / 1e4).toLocaleString() + '万';
+  return v.toLocaleString() + '円';
+}
+
+function fmtVal(key, raw) {
+  if (raw === '' || raw === '-' || raw === 'NaN' || raw == null) return null;
+  const v = parseFloat(raw);
+  if (!isFinite(v)) return null;
+  if (isRatioCol(key))    return v.toFixed(1) + '%';
+  if (isPERPBR(key))      return v.toFixed(1) + '倍';
+  if (isPerShareCol(key)) return v.toLocaleString() + '円';
+  return fmtMoney(v);
+}
+
+function fmtCustom(v, pct) {
+  if (!isFinite(v)) return null;
+  if (pct) return (v * 100).toFixed(1) + '%';
+  // 小さい数値はそのまま（比率など）
+  const a = Math.abs(v);
+  if (a < 1000) return v.toFixed(2);
+  return fmtMoney(v);
+}
+
+// ===== CSV パース =====
+function parseIRBankCSVCombined(text) {
+  const lines = text.replace(/\r/g, '').replace(/^﻿/, '').split('\n');
+  let hi = -1;
+  for (let i = 0; i < Math.min(lines.length, 8); i++) {
+    if (lines[i].startsWith('コード')) { hi = i; break; }
+  }
+  if (hi < 0) return { byYear: {}, headers: [] };
+  const headers = lines[hi].split(',').map(h => h.trim());
+  const yi = headers.indexOf('年度');
+  const byYear = {};
+  for (let i = hi + 1; i < lines.length; i++) {
+    const cols = lines[i].split(',');
+    const code = cols[0]?.trim();
+    if (!code || code.length < 4) continue;
+    const row = {};
+    headers.forEach((h, j) => { row[h] = cols[j]?.trim() ?? ''; });
+    const fy = yi >= 0 ? (cols[yi]?.trim() || '') : '';
+    const year = fy.split('/')[0] || fy.slice(0, 4);
+    if (!year || !/^\d{4}$/.test(year)) continue;
+    if (!byYear[year]) byYear[year] = {};
+    byYear[year][code] = row;
+  }
+  return { byYear, headers };
+}
+
+function parseIRBankCSV(text) {
+  const lines = text.replace(/\r/g, '').replace(/^﻿/, '').split('\n');
+  let hi = -1;
+  for (let i = 0; i < Math.min(lines.length, 8); i++) {
+    if (lines[i].startsWith('コード')) { hi = i; break; }
+  }
+  if (hi < 0) return { data: {}, headers: [] };
+  const headers = lines[hi].split(',').map(h => h.trim());
+  const data = {};
+  for (let i = hi + 1; i < lines.length; i++) {
+    const cols = lines[i].split(',');
+    const code = cols[0]?.trim();
+    if (!code || code.length < 4) continue;
+    const row = {};
+    headers.forEach((h, j) => { row[h] = cols[j]?.trim() ?? ''; });
+    data[code] = row;
+  }
+  return { data, headers };
+}
+
+// ===== データ読み込み =====
+async function loadData() {
+  const status = document.getElementById('data-status');
+  try {
+    const cRes = await fetch('data/companies.csv');
+    if (!cRes.ok) throw new Error('companies.csv not found');
+    parseCompanies(await cRes.text());
+
+    status.textContent = '全年度データ読み込み中...';
+    const [plRes, bsRes] = await Promise.all([
+      fetch('data/all-pl.csv'), fetch('data/all-bs.csv')
+    ]);
+
+    if (plRes.ok && bsRes.ok) {
+      const plParsed = parseIRBankCSVCombined(await plRes.text());
+      const bsParsed = parseIRBankCSVCombined(await bsRes.text());
+      allPlData  = plParsed.byYear;
+      allBsData  = bsParsed.byYear;
+      plHeaders  = plParsed.headers;
+      bsHeaders  = bsParsed.headers;
+      availableYears = Object.keys(allPlData).sort((a, b) => b - a);
+    }
+
+    if (!availableYears.length) {
+      status.textContent = '年別データ未取得（Actionsでデータを取得してください）';
+      initSearch(); return;
+    }
+
+    const sel = document.getElementById('year-select');
+    sel.innerHTML = availableYears.map(y => `<option value="${y}">${y}年度</option>`).join('');
+    loadYear(availableYears[0]);
+    initSearch();
+
+    sel.addEventListener('change', () => {
+      loadYear(sel.value);
+      if (selectedCodes.length) renderTable();
+    });
+  } catch(e) {
+    status.textContent = `読み込みエラー: ${e.message}`;
+    initSearch();
+  }
+}
+
+function loadYear(year) {
+  const status = document.getElementById('data-status');
+  plData = allPlData[year] || {};
+  bsData = allBsData[year] || {};
+  status.textContent = `${year}年度　${Object.keys(plData).length}社`;
+  populateDropdowns();
+  if (!metrics.length) metrics = DEFAULT_METRICS.filter(m =>
+    (m.source === 'pl' ? plHeaders : bsHeaders).includes(m.key)
+  );
+}
+
+function parseCompanies(text) {
+  const lines = text.replace(/\r/g, '').replace(/^﻿/, '').split('\n');
+  const h = lines[0].split(',').map(x => x.trim());
+  const idx = { code: h.indexOf('コード'), name: h.indexOf('銘柄名'), market: h.indexOf('市場・商品区分'), s33n: h.indexOf('33業種区分') };
+  companies = [];
+  for (let r = 1; r < lines.length; r++) {
+    const c = lines[r].split(',');
+    const code = c[idx.code]?.trim();
+    if (!code) continue;
+    const mkt = c[idx.market]?.trim() || '';
+    if (mkt === 'ETF・ETN' || mkt.includes('REIT') || mkt.includes('インフラ')) continue;
+    companies.push({ code, name: c[idx.name]?.trim() || '', s33n: c[idx.s33n]?.trim() || '' });
+  }
+}
+
+// ===== ドロップダウン構築 =====
+function buildColOptions(sel, includeConst = false) {
+  sel.innerHTML = '';
+  if (includeConst) {
+    const o = document.createElement('option');
+    o.value = '__const__'; o.textContent = '定数（数値入力）';
+    sel.appendChild(o);
+  }
+  const addGroup = (label, headers, source) => {
+    const cols = headers.filter(h => !SKIP_COLS.has(h));
+    if (!cols.length) return;
+    const g = document.createElement('optgroup'); g.label = label;
+    cols.forEach(h => {
+      const o = document.createElement('option');
+      o.value = source + ':' + h; o.textContent = h;
+      g.appendChild(o);
+    });
+    sel.appendChild(g);
+  };
+  addGroup('損益計算書 (PL)', plHeaders, 'pl');
+  addGroup('貸借対照表 (BS)', bsHeaders, 'bs');
+}
+
+function populateDropdowns() {
+  // 既存指標追加ドロップダウン
+  const ms = document.getElementById('metric-select');
+  ms.innerHTML = '<option value="">列を選択...</option>';
+  buildColOptions(ms);
+
+  // カスタム計算式 左右オペランド
+  buildColOptions(document.getElementById('formula-left'));
+  buildColOptions(document.getElementById('formula-right'), true);
+}
+
+// ===== 検索 =====
+function initSearch() {
+  const input = document.getElementById('co-search');
+  const dd    = document.getElementById('co-dropdown');
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim();
+    if (!q) { dd.style.display = 'none'; pendingCode = null; return; }
+    const hits = companies.filter(c => c.code.startsWith(q) || c.name.includes(q)).slice(0, 25);
+    if (!hits.length) { dd.style.display = 'none'; return; }
+    dd.innerHTML = hits.map(c =>
+      `<div class="co-item" data-code="${c.code}">
+        <span class="co-code-s">${c.code}</span><span>${c.name}</span>
+        <span class="co-sector-s">${c.s33n !== '-' ? c.s33n : ''}</span>
+      </div>`
+    ).join('');
+    dd.style.display = 'block';
+    dd.querySelectorAll('.co-item').forEach(el => {
+      el.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const c = companies.find(x => x.code === el.dataset.code);
+        if (!c) return;
+        input.value = `${c.code}　${c.name}`; pendingCode = c.code; dd.style.display = 'none';
+      });
+    });
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('.search-wrap')) dd.style.display = 'none'; });
+
+  document.getElementById('add-co-btn').addEventListener('click', () => {
+    if (pendingCode) { addCompany(pendingCode); input.value = ''; pendingCode = null; }
+    else { const c = companies.find(x => x.code === input.value.trim()); if (c) { addCompany(c.code); input.value = ''; } }
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && pendingCode) { addCompany(pendingCode); input.value = ''; pendingCode = null; }
+  });
+
+  // 既存指標追加
+  document.getElementById('metric-add-btn').addEventListener('click', () => {
+    const val = document.getElementById('metric-select').value;
+    if (!val) return;
+    const sep = val.indexOf(':'), source = val.slice(0, sep), key = val.slice(sep+1);
+    if (!metrics.find(m => m.type === 'col' && m.key === key && m.source === source)) {
+      metrics.push({type:'col', key, source}); renderTable();
+    }
+    document.getElementById('metric-select').value = '';
+  });
+
+  // カスタム計算式: 右辺が定数のとき数値入力を表示
+  document.getElementById('formula-right').addEventListener('change', function() {
+    document.getElementById('formula-right-const').style.display =
+      this.value === '__const__' ? 'inline-block' : 'none';
+  });
+
+  // カスタム計算式を追加
+  document.getElementById('formula-add-btn').addEventListener('click', () => {
+    const label = document.getElementById('formula-name').value.trim();
+    if (!label) { alert('指標名を入力してください'); return; }
+
+    const leftVal = document.getElementById('formula-left').value;
+    if (!leftVal) { alert('左辺の列を選択してください'); return; }
+    const [leftSrc, leftKey] = [leftVal.slice(0, leftVal.indexOf(':')), leftVal.slice(leftVal.indexOf(':')+1)];
+
+    const op = document.getElementById('formula-op').value;
+
+    const rightVal = document.getElementById('formula-right').value;
+    let rightKey = null, rightSrc = null, rightConst = null;
+    if (rightVal === '__const__') {
+      const cv = parseFloat(document.getElementById('formula-right-const').value);
+      if (!isFinite(cv)) { alert('定数を入力してください'); return; }
+      rightConst = cv;
+    } else {
+      [rightSrc, rightKey] = [rightVal.slice(0, rightVal.indexOf(':')), rightVal.slice(rightVal.indexOf(':')+1)];
+    }
+
+    const pct = document.getElementById('formula-pct').checked;
+    metrics.push({type:'custom', label, leftKey, leftSrc, op, rightKey, rightSrc, rightConst, pct});
+    renderTable();
+    document.getElementById('formula-name').value = '';
+  });
+}
+
+// ===== 企業管理 =====
+function addCompany(code) {
+  if (selectedCodes.includes(code)) return;
+  if (selectedCodes.length >= 8) { alert('最大8社まで追加できます'); return; }
+  selectedCodes.push(code); renderChips(); renderTable();
+}
+function removeCompany(code) { selectedCodes = selectedCodes.filter(c => c !== code); renderChips(); renderTable(); }
+function removeMetric(idx) { metrics.splice(idx, 1); renderTable(); }
+
+function renderChips() {
+  const row = document.getElementById('chips-row');
+  if (!selectedCodes.length) { row.innerHTML = ''; return; }
+  row.innerHTML = selectedCodes.map(code => {
+    const co = companies.find(c => c.code === code);
+    return `<div class="co-chip">
+      <span class="co-chip-code">${code}</span>
+      <span class="co-chip-name">${co?.name || ''}</span>
+      <button class="co-chip-del" onclick="removeCompany('${code}')" title="削除">×</button>
+    </div>`;
+  }).join('');
+}
+
+// ===== カスタム指標の計算 =====
+function evalCustom(m, code) {
+  const leftRow = m.leftSrc === 'pl' ? plData[code] : bsData[code];
+  const left = parseFloat(leftRow?.[m.leftKey]);
+  if (!isFinite(left)) return null;
+
+  let right;
+  if (m.rightConst !== null) {
+    right = m.rightConst;
+  } else {
+    const rightRow = m.rightSrc === 'pl' ? plData[code] : bsData[code];
+    right = parseFloat(rightRow?.[m.rightKey]);
+    if (!isFinite(right)) return null;
+  }
+
+  switch (m.op) {
+    case '+': return left + right;
+    case '-': return left - right;
+    case '×': return left * right;
+    case '÷': return right !== 0 ? left / right : null;
+  }
+  return null;
+}
+
+// ===== テーブル描画 =====
+function renderTable() {
+  const empty = document.getElementById('empty-state');
+  const wrap  = document.getElementById('table-wrap');
+  if (!selectedCodes.length) { empty.style.display = 'block'; wrap.style.display = 'none'; return; }
+  empty.style.display = 'none'; wrap.style.display = 'block';
+
+  // ヘッダー
+  const head = document.getElementById('t-head');
+  head.innerHTML = '';
+  const trH = document.createElement('tr');
+  const thL = document.createElement('th');
+  thL.className = 'col-label';
+  thL.innerHTML = `<div class="col-label-head">指標</div>`;
+  trH.appendChild(thL);
+  selectedCodes.forEach(code => {
+    const co  = companies.find(c => c.code === code);
+    const row = plData[code] || bsData[code];
+    const fy  = row?.['年度'] || row?.['決算期'] || '';
+    const th  = document.createElement('th');
+    th.className = 'col-co';
+    th.innerHTML = `
+      <div class="co-head">
+        <div class="co-code-h">${code}</div>
+        <div class="co-name-h">${co?.name || ''}</div>
+        ${co?.s33n && co.s33n !== '-' ? `<span class="co-tag-h">${co.s33n}</span>` : ''}
+        ${fy ? `<span class="co-fy-h">決算期: ${fy}</span>` : ''}
+        <a class="co-link-h" href="https://irbank.net/${code}" target="_blank" rel="noopener">IRBankで見る →</a>
+      </div>`;
+    trH.appendChild(th);
+  });
+  head.appendChild(trH);
+
+  // ボディ
+  const body = document.getElementById('t-body');
+  body.innerHTML = '';
+
+  metrics.forEach((m, idx) => {
+    // 各社の値を取得
+    const rawVals = selectedCodes.map(code => {
+      if (m.type === 'col') {
+        const row = m.source === 'pl' ? plData[code] : bsData[code];
+        return row?.[m.key] ?? '';
+      } else {
+        return evalCustom(m, code);
+      }
+    });
+
+    const nums   = rawVals.map(v => v === null ? NaN : parseFloat(v));
+    const valids = nums.filter(v => isFinite(v));
+    const maxV   = valids.length ? Math.max(...valids) : null;
+    const minV   = valids.length ? Math.min(...valids) : null;
+    const lower  = m.type === 'col' && LOWER_BETTER.has(m.key);
+
+    const tr  = document.createElement('tr');
+    const tdL = document.createElement('td');
+    tdL.className = 'col-label';
+    const label = m.type === 'col' ? m.key : m.label;
+    tdL.innerHTML = `<div class="col-label-cell">
+      <span>${label}</span>
+      ${m.type === 'custom' ? '<span class="metric-custom-badge">式</span>' : ''}
+      <button class="metric-del" onclick="removeMetric(${idx})">×</button>
+    </div>`;
+    tr.appendChild(tdL);
+
+    rawVals.forEach((raw, i) => {
+      const td  = document.createElement('td');
+      const fmt = m.type === 'col'
+        ? fmtVal(m.key, raw)
+        : fmtCustom(raw, m.pct);
+
+      if (fmt === null) {
+        td.innerHTML = `<div class="val-cell val-na">—</div>`;
+      } else {
+        let cls = 'val-cell';
+        if (valids.length > 1 && isFinite(nums[i])) {
+          if (lower ? nums[i] === minV : nums[i] === maxV) cls += ' val-best';
+          else if (lower ? nums[i] === maxV : nums[i] === minV) cls += ' val-worst';
+        }
+        td.innerHTML = `<div class="${cls}">${fmt}</div>`;
+      }
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+}
+
+loadData();
+</script>
+</body>
+</html>
