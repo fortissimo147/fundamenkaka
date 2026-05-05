@@ -39,7 +39,8 @@ jobs:
       # ── compare.html用: 年別CSVダウンロード (2013-2025) ─────────────────
       - name: 年別CSVダウンロード (compare.html用)
         run: |
-          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          BASE="https://f.irbank.net/files"
 
           for YEAR in $(seq 2013 2025); do
             OUTDIR="data/${YEAR}"
@@ -50,52 +51,31 @@ jobs:
 
             YY=$(printf "%02d" $((YEAR % 100)))
             CODE="00${YY}"
-            URL="https://irbank.net/download/${CODE}"
-            echo "=== Downloading ${YEAR} (${URL}) ==="
+            echo "=== Downloading ${YEAR} (code=${CODE}) ==="
             mkdir -p "${OUTDIR}"
 
-            TMPZIP="/tmp/irbank_${YEAR}.zip"
-            HTTP=$(curl -s -o "${TMPZIP}" -w "%{http_code}" \
-              -L -A "${UA}" -H "Referer: https://irbank.net/" "${URL}")
-            echo "HTTP status: ${HTTP}"
+            HTTP_PL=$(curl -s -o "${OUTDIR}/pl.csv" -w "%{http_code}" \
+              -L -A "${UA}" -H "Referer: https://irbank.net/" \
+              "${BASE}/${CODE}/fy-profit-and-loss.csv")
+            echo "PL HTTP: ${HTTP_PL}"
 
-            if [ "${HTTP}" != "200" ]; then
-              echo "SKIP: ${YEAR} returned HTTP ${HTTP}"
-              continue
+            HTTP_BS=$(curl -s -o "${OUTDIR}/bs.csv" -w "%{http_code}" \
+              -L -A "${UA}" -H "Referer: https://irbank.net/" \
+              "${BASE}/${CODE}/fy-balance-sheet.csv")
+            echo "BS HTTP: ${HTTP_BS}"
+
+            if [ "${HTTP_PL}" != "200" ]; then
+              echo "PL failed (${HTTP_PL}) - removing"
+              rm -f "${OUTDIR}/pl.csv"
+            else
+              echo "PL OK: $(wc -l < ${OUTDIR}/pl.csv) lines"
             fi
-
-            # zipとして有効か確認
-            if ! unzip -t "${TMPZIP}" > /dev/null 2>&1; then
-              echo "SKIP: ${YEAR} - not a valid zip file"
-              echo "Downloaded content (first 300 bytes):"
-              head -c 300 "${TMPZIP}" | cat || true
-              continue
+            if [ "${HTTP_BS}" != "200" ]; then
+              echo "BS failed (${HTTP_BS}) - removing"
+              rm -f "${OUTDIR}/bs.csv"
+            else
+              echo "BS OK: $(wc -l < ${OUTDIR}/bs.csv) lines"
             fi
-
-            echo "--- ZIP contents ---"
-            unzip -l "${TMPZIP}"
-
-            TMPDIR="/tmp/irbank_${YEAR}_extracted"
-            mkdir -p "${TMPDIR}"
-            unzip -o "${TMPZIP}" -d "${TMPDIR}" 2>/dev/null || true
-
-            echo "--- Extracted files ---"
-            find "${TMPDIR}" -type f | sort
-
-            # 全CSVをそのままコピー（ファイル名を保持）
-            find "${TMPDIR}" -type f -name "*.csv" | while read f; do
-              cp "${f}" "${OUTDIR}/$(basename ${f})"
-              echo "Copied: $(basename ${f})"
-            done
-
-            # PL・BSをpl.csv/bs.csvという名前でも保存
-            PL=$(find "${TMPDIR}" -type f \( \
-              -iname "*profit*loss*" -o -iname "*損益*" \) | head -1)
-            [ -n "${PL}" ] && cp "${PL}" "${OUTDIR}/pl.csv" && echo "PL -> ${OUTDIR}/pl.csv"
-
-            BS=$(find "${TMPDIR}" -type f \( \
-              -iname "*balance*sheet*" -o -iname "*貸借*" \) | head -1)
-            [ -n "${BS}" ] && cp "${BS}" "${OUTDIR}/bs.csv" && echo "BS -> ${OUTDIR}/bs.csv"
           done
 
       # ── manifest.json 更新 ───────────────────────────────────────────────
