@@ -14,20 +14,25 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
       # ── index.html用: 月次スナップショット ──────────────────────────────
       - name: 月次CSVダウンロード (index.html用)
         run: |
           DATE=$(date +'%Y-%m')
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
           mkdir -p data/$DATE
-          curl -f -L \
-            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-            -o data/$DATE/fy-balance-sheet.csv \
-            https://f.irbank.net/files/0000/fy-balance-sheet.csv
-          curl -f -L \
-            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-            -o data/$DATE/fy-profit-and-loss.csv \
-            https://f.irbank.net/files/0000/fy-profit-and-loss.csv
+
+          HTTP=$(curl -s -o data/$DATE/fy-balance-sheet.csv -w "%{http_code}" \
+            -L -A "${UA}" -H "Referer: https://irbank.net/" \
+            https://f.irbank.net/files/0000/fy-balance-sheet.csv)
+          echo "BS HTTP: ${HTTP}"
+
+          HTTP=$(curl -s -o data/$DATE/fy-profit-and-loss.csv -w "%{http_code}" \
+            -L -A "${UA}" -H "Referer: https://irbank.net/" \
+            https://f.irbank.net/files/0000/fy-profit-and-loss.csv)
+          echo "PL HTTP: ${HTTP}"
 
       # ── compare.html用: 年別CSVダウンロード (2013-2025) ─────────────────
       - name: 年別CSVダウンロード (compare.html用)
