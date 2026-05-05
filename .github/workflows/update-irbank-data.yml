@@ -36,11 +36,17 @@ jobs:
           echo "PL HTTP: ${HTTP}"
           [ "${HTTP}" = "200" ] || echo "WARNING: PL download returned ${HTTP}"
 
-      # ── compare.html用: 年別CSVダウンロード (既存年: 2013-2016) ─────────
+      # ── compare.html用: 年別CSVダウンロード ─────────────────────────────
       - name: 年別CSVダウンロード (compare.html用)
         run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
           BASE="https://f.irbank.net/files"
+          COOKIE_JAR="/tmp/irbank_cookies.txt"
+
+          # セッションクッキーを取得
+          curl -s -L -A "${UA}" -c "${COOKIE_JAR}" -b "${COOKIE_JAR}" \
+            https://irbank.net/ > /dev/null
+          echo "Cookie jar: $(wc -l < ${COOKIE_JAR}) entries"
 
           for YEAR in $(seq 2013 2025); do
             OUTDIR="data/${YEAR}"
@@ -55,7 +61,8 @@ jobs:
               "${BASE}/${YEAR}/fy-profit-and-loss.csv" \
               "${BASE}/00${YY}/pl.csv"; do
               HTTP=$(curl -s -o "${OUTDIR}/pl.csv.tmp" -w "%{http_code}" \
-                -L -A "${UA}" -H "Referer: https://irbank.net/" "${URL_PL}")
+                -L -A "${UA}" -H "Referer: https://irbank.net/" \
+                -c "${COOKIE_JAR}" -b "${COOKIE_JAR}" "${URL_PL}")
               echo "  PL ${URL_PL} -> HTTP ${HTTP}"
               if [ "${HTTP}" = "200" ] && [ -s "${OUTDIR}/pl.csv.tmp" ]; then
                 if ! head -c 20 "${OUTDIR}/pl.csv.tmp" | grep -q "<!DOCTYPE\|<html"; then
@@ -79,7 +86,8 @@ jobs:
               "${BASE}/${YEAR}/fy-balance-sheet.csv" \
               "${BASE}/00${YY}/bs.csv"; do
               HTTP=$(curl -s -o "${OUTDIR}/bs.csv.tmp" -w "%{http_code}" \
-                -L -A "${UA}" -H "Referer: https://irbank.net/" "${URL_BS}")
+                -L -A "${UA}" -H "Referer: https://irbank.net/" \
+                -c "${COOKIE_JAR}" -b "${COOKIE_JAR}" "${URL_BS}")
               echo "  BS ${URL_BS} -> HTTP ${HTTP}"
               if [ "${HTTP}" = "200" ] && [ -s "${OUTDIR}/bs.csv.tmp" ]; then
                 if ! head -c 20 "${OUTDIR}/bs.csv.tmp" | grep -q "<!DOCTYPE\|<html"; then
@@ -101,7 +109,7 @@ jobs:
             [ "${BS_OK}" = "0" ] && [ ! -f "${OUTDIR}/bs.csv" ] && echo "  BS FAILED for ${YEAR} (no file)"
           done
 
-      # ── 0000ファイルを年別に分割 (2017-2025をカバー) ────────────────────
+      # ── 0000ファイルを年別に分割 ─────────────────────────────────────────
       - name: 0000ファイルを年別に分割
         run: |
           DATE=$(date +'%Y-%m')
@@ -115,7 +123,6 @@ jobs:
               with open(src, encoding='utf-8-sig', errors='replace') as f:
                   lines = f.readlines()
 
-              # ヘッダー行を探す
               hi = -1
               preamble = []
               for i, line in enumerate(lines[:8]):
@@ -173,7 +180,6 @@ jobs:
       - name: manifest.json 更新
         run: |
           DATE=$(date +'%Y-%m')
-          # pl.csvが存在する全年をリストアップ（行数問わず）
           YEARS_WITH_DATA=$(find data/ -mindepth 2 -name "pl.csv" \
             | sed 's|data/||;s|/pl.csv||' | grep -E '^[0-9]{4}$' | sort -n)
           LATEST_YEAR=$(echo "$YEARS_WITH_DATA" | tail -1)
