@@ -27,9 +27,6 @@ header p { font-size: 12px; color: #888; margin-top: 2px; }
 .co-sector-s { color: #999; font-size: 10px; margin-left: auto; white-space: nowrap; }
 #add-co-btn { font-size: 12px; background: #1a1a1a; color: #fff; border: none; border-radius: 7px; padding: 7px 16px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
 #add-co-btn:hover { background: #333; }
-.year-wrap { display: flex; align-items: center; gap: 6px; }
-.year-wrap label { font-size: 11px; color: #888; white-space: nowrap; }
-#year-select { font-size: 12px; border: 0.5px solid #e0ddd8; border-radius: 7px; padding: 6px 10px; outline: none; background: #fff; color: #1a1a1a; cursor: pointer; }
 
 /* 追加済み企業チップ */
 .chips-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -38,10 +35,16 @@ header p { font-size: 12px; color: #888; margin-top: 2px; }
 .co-chip-code { color: #aaa; font-size: 10px; }
 .co-chip-del { background: none; border: none; cursor: pointer; color: #bbb; font-size: 14px; line-height: 1; padding: 0; margin-left: 2px; }
 .co-chip-del:hover { color: #E24B4A; }
-.data-status { font-size: 10px; color: #bbb; margin-top: 6px; }
+
+/* 年度切替（右下） */
+.search-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+.data-status { font-size: 10px; color: #bbb; }
+.year-wrap { display: flex; align-items: center; gap: 6px; }
+.year-wrap label { font-size: 11px; color: #888; white-space: nowrap; }
+#year-select { font-size: 12px; border: 0.5px solid #e0ddd8; border-radius: 7px; padding: 5px 8px; outline: none; background: #fff; color: #1a1a1a; cursor: pointer; }
 
 /* ===== テーブル ===== */
-.table-card { background: #fff; border: 0.5px solid #e0ddd8; border-radius: 10px; overflow: hidden; }
+.table-card { background: #fff; border: 0.5px solid #e0ddd8; border-radius: 10px; overflow: hidden; margin-bottom: 1.25rem; }
 .table-wrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; }
 th, td { border-bottom: 0.5px solid #e0ddd8; vertical-align: top; }
@@ -106,12 +109,27 @@ tr:last-child td { border-bottom: none; }
 }
 .add-row button:hover { background: #f8f7f4; }
 .add-row-label { font-size: 11px; color: #aaa; white-space: nowrap; }
-.add-row-sep { width: 100%; height: 0; border-top: 0.5px solid #f0ede8; margin: 2px 0; }
 #formula-right-const { width: 80px; display: none; }
 #formula-name { width: 120px; }
 #metric-select { max-width: 200px; }
 
 .empty-state { padding: 48px; text-align: center; color: #bbb; font-size: 13px; }
+
+/* ===== BS構成比カード ===== */
+.bs-visual-card { background: #fff; border: 0.5px solid #e0ddd8; border-radius: 10px; padding: 1rem 1.25rem; }
+.bs-visual-title { font-size: 12px; color: #888; margin-bottom: 16px; }
+.bs-visual-companies { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-end; }
+.bs-visual-co { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 80px; }
+.bs-visual-bars { display: flex; gap: 4px; align-items: flex-end; height: 180px; }
+.bs-bar { display: flex; flex-direction: column; width: 36px; justify-content: flex-end; }
+.bs-seg { display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; border-radius: 2px; padding: 0 2px; }
+.bs-seg-lbl { font-size: 9px; color: rgba(255,255,255,0.9); text-align: center; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; }
+.bs-co-name { font-size: 10px; color: #555; text-align: center; line-height: 1.3; max-width: 80px; }
+.bs-co-code { font-size: 10px; color: #aaa; }
+.bs-bar-lbl { font-size: 10px; color: #aaa; text-align: center; }
+.bs-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; padding-top: 10px; border-top: 0.5px solid #e0ddd8; }
+.bs-legend-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #666; }
+.bs-legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -127,15 +145,17 @@ tr:last-child td { border-bottom: none; }
         <input id="co-search" type="text" placeholder="銘柄コードまたは会社名を入力" autocomplete="off">
         <div class="co-dropdown" id="co-dropdown"></div>
       </div>
-      <div class="year-wrap">
-        <label for="year-select">年度</label>
-        <select id="year-select"></select>
-      </div>
       <button id="add-co-btn">+ 追加</button>
       <a href="index.html" style="margin-left:auto;font-size:12px;color:#378ADD;text-decoration:none;white-space:nowrap;flex-shrink:0;">← ビジュアライザー</a>
     </div>
     <div class="chips-row" id="chips-row"></div>
-    <div class="data-status" id="data-status">データ読み込み中...</div>
+    <div class="search-footer">
+      <div class="data-status" id="data-status">データ読み込み中...</div>
+      <div class="year-wrap">
+        <label for="year-select">年度切替</label>
+        <select id="year-select"></select>
+      </div>
+    </div>
   </div>
 
   <div class="table-card">
@@ -180,6 +200,13 @@ tr:last-child td { border-bottom: none; }
       </div>
     </div>
   </div>
+
+  <!-- BS構成比 -->
+  <div class="bs-visual-card" id="bs-visual-card" style="display:none;">
+    <div class="bs-visual-title">BSの構成比（左: 資産　右: 負債＋純資産）</div>
+    <div class="bs-visual-companies" id="bs-visual-companies"></div>
+    <div class="bs-legend" id="bs-legend"></div>
+  </div>
 </div>
 
 <script>
@@ -191,8 +218,8 @@ let selectedCodes   = [];
 let metrics         = [];
 let pendingCode     = null;
 let availableYears  = [];
-let manualOverrides = {};  // key: "idx_code" → value string
-let freeTextRows    = [];  // [{id, label, values: {code: text}}]
+let manualOverrides = {};
+let freeTextRows    = [];
 let freeRowCounter  = 0;
 
 const DEFAULT_METRICS = [
@@ -208,6 +235,26 @@ const DEFAULT_METRICS = [
 const LOWER_BETTER = new Set(['固定比率','固定長期適合率','負債比率','有利子負債比率']);
 const SKIP_COLS = new Set(['コード','会社名','銘柄名','市場','業種','決算期','決算月',
   '上場','証券コード','','ティッカー','年度','期末','決算年月','市場・商品区分','33業種区分']);
+
+// BSカラム候補（IRBank CSVの典型的な列名）
+const BS_KEYS = {
+  currentAsset:  ['流動資産'],
+  fixedAsset:    ['固定資産', '非流動資産'],
+  totalAsset:    ['総資産'],
+  currentLiab:   ['流動負債'],
+  fixedLiab:     ['固定負債', '非流動負債'],
+  equity:        ['純資産'],
+};
+const BS_COLORS = {
+  currentAsset: '#378ADD', fixedAsset: '#185FA5',
+  currentLiab:  '#D85A30', fixedLiab:  '#993C1D',
+  equity:       '#639922',
+};
+const BS_LABELS = {
+  currentAsset: '流動資産', fixedAsset: '固定資産',
+  currentLiab:  '流動負債', fixedLiab:  '固定負債',
+  equity:       '純資産',
+};
 
 function isRatioCol(key) { return /比率|ROE|ROA|ROIC|利回り|率$|マージン/i.test(key); }
 function isPerShareCol(key) { return /EPS|BPS|DPS|一株/.test(key); }
@@ -237,6 +284,33 @@ function fmtCustom(v, pct) {
   const a = Math.abs(v);
   if (a < 1000) return v.toFixed(2);
   return fmtMoney(v);
+}
+
+// BSの列名を実際のヘッダーから解決
+function resolveBsKey(candidates) {
+  for (const k of candidates) {
+    if (bsHeaders.includes(k)) return k;
+  }
+  return null;
+}
+
+function getBsVal(code, candidates) {
+  const key = resolveBsKey(candidates);
+  if (!key) return null;
+  const v = parseFloat(bsData[code]?.[key]);
+  return isFinite(v) ? v : null;
+}
+
+// データ欠落時は手動入力値（manualOverrides）を参照
+function getBsValWithOverride(code, candidates) {
+  const fromData = getBsVal(code, candidates);
+  if (fromData !== null) return fromData;
+  const key = resolveBsKey(candidates);
+  if (!key) return null;
+  const idx = metrics.findIndex(m => m.type === 'col' && m.source === 'bs' && m.key === key);
+  if (idx === -1) return null;
+  const v = parseFloat(manualOverrides[`${idx}_${code}`] || '');
+  return isFinite(v) ? v : null;
 }
 
 // ===== CSV パース =====
@@ -322,7 +396,7 @@ async function loadData() {
       saveState();
       manualOverrides = {};
       loadYear(sel.value);
-      if (selectedCodes.length) renderTable();
+      if (selectedCodes.length) { renderTable(); renderBSVisual(); }
     });
   } catch(e) {
     status.textContent = `読み込みエラー: ${e.message}`;
@@ -356,7 +430,7 @@ function parseCompanies(text) {
   }
 }
 
-// ===== 状態保存（再描画前に現在の入力値を保存） =====
+// ===== 状態保存 =====
 function saveState() {
   document.querySelectorAll('.val-input-manual').forEach(input => {
     manualOverrides[input.dataset.ok] = input.value;
@@ -486,9 +560,9 @@ function initSearch() {
 function addCompany(code) {
   if (selectedCodes.includes(code)) return;
   if (selectedCodes.length >= 8) { alert('最大8社まで追加できます'); return; }
-  saveState(); selectedCodes.push(code); renderChips(); renderTable();
+  saveState(); selectedCodes.push(code); renderChips(); renderTable(); renderBSVisual();
 }
-function removeCompany(code) { saveState(); selectedCodes = selectedCodes.filter(c => c !== code); renderChips(); renderTable(); }
+function removeCompany(code) { saveState(); selectedCodes = selectedCodes.filter(c => c !== code); renderChips(); renderTable(); renderBSVisual(); }
 function removeMetric(idx) { saveState(); metrics.splice(idx, 1); renderTable(); }
 function removeFreeRow(id) { saveState(); freeTextRows = freeTextRows.filter(r => r.id !== id); renderTable(); }
 
@@ -534,7 +608,6 @@ function renderTable() {
   if (!selectedCodes.length) { empty.style.display = 'block'; wrap.style.display = 'none'; return; }
   empty.style.display = 'none'; wrap.style.display = 'block';
 
-  // ヘッダー
   const head = document.getElementById('t-head');
   head.innerHTML = '';
   const trH = document.createElement('tr');
@@ -560,12 +633,10 @@ function renderTable() {
   });
   head.appendChild(trH);
 
-  // ボディ
   const body = document.getElementById('t-body');
   body.innerHTML = '';
 
   metrics.forEach((m, idx) => {
-    // 元データの取得（nullかどうか判定用）
     const origFmts = selectedCodes.map(code => {
       if (m.type === 'col') {
         const row = m.source === 'pl' ? plData[code] : bsData[code];
@@ -576,7 +647,6 @@ function renderTable() {
       }
     });
 
-    // ベスト/ワースト比較用の数値（手動入力値も含む）
     const nums = selectedCodes.map((code, i) => {
       if (origFmts[i] !== null) {
         if (m.type === 'col') {
@@ -586,7 +656,6 @@ function renderTable() {
           return evalCustom(m, code);
         }
       }
-      // 手動入力値
       const ok = `${idx}_${code}`;
       const mv = parseFloat(manualOverrides[ok] || '');
       return isFinite(mv) ? mv : NaN;
@@ -610,9 +679,7 @@ function renderTable() {
     selectedCodes.forEach((code, i) => {
       const td = document.createElement('td');
       const fmt = origFmts[i];
-
       if (fmt === null) {
-        // データ欠落 → 手動入力セル
         const ok = `${idx}_${code}`;
         const saved = manualOverrides[ok] || '';
         const input = document.createElement('input');
@@ -638,7 +705,6 @@ function renderTable() {
     body.appendChild(tr);
   });
 
-  // 自由記述行
   freeTextRows.forEach(fr => {
     const tr  = document.createElement('tr');
     const tdL = document.createElement('td');
@@ -659,7 +725,6 @@ function renderTable() {
     cell.appendChild(delBtn);
     tdL.appendChild(cell);
     tr.appendChild(tdL);
-
     selectedCodes.forEach(code => {
       const td = document.createElement('td');
       const input = document.createElement('input');
@@ -676,6 +741,130 @@ function renderTable() {
       tr.appendChild(td);
     });
     body.appendChild(tr);
+  });
+
+  // 手動入力が確定したらBSチャートを更新
+  document.querySelectorAll('.val-input-manual').forEach(input => {
+    input.addEventListener('change', () => { saveState(); renderBSVisual(); });
+  });
+}
+
+// ===== BS構成比の描画 =====
+function renderBSVisual() {
+  const card = document.getElementById('bs-visual-card');
+  const container = document.getElementById('bs-visual-companies');
+  const legend = document.getElementById('bs-legend');
+
+  if (!selectedCodes.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  container.innerHTML = '';
+  legend.innerHTML = '';
+
+  const H = 180;
+
+  // 各社のBS数値を取得
+  const coData = selectedCodes.map(code => {
+    const ca = getBsValWithOverride(code, BS_KEYS.currentAsset);
+    const fa = getBsValWithOverride(code, BS_KEYS.fixedAsset);
+    const ta = getBsValWithOverride(code, BS_KEYS.totalAsset);
+    const cl = getBsValWithOverride(code, BS_KEYS.currentLiab);
+    const fl = getBsValWithOverride(code, BS_KEYS.fixedLiab);
+    const eq = getBsValWithOverride(code, BS_KEYS.equity);
+    return { code, ca, fa, ta, cl, fl, eq };
+  });
+
+  // スケール基準：最大総資産
+  const maxTA = Math.max(...coData.map(d => d.ta ?? (d.ca ?? 0) + (d.fa ?? 0)), 1);
+
+  // 使用できる列があるか判定
+  const hasDetail = coData.some(d => d.ca !== null || d.fa !== null);
+  const usedKeys = new Set();
+
+  coData.forEach(d => {
+    const co = companies.find(c => c.code === d.code);
+    const totalAsset = d.ta ?? (d.ca ?? 0) + (d.fa ?? 0);
+    if (!totalAsset) return;
+
+    const scale = totalAsset / maxTA;
+
+    // 左バー（資産）
+    const leftSegs = [];
+    if (hasDetail) {
+      if (d.ca !== null) { leftSegs.push({ key: 'currentAsset', val: d.ca }); usedKeys.add('currentAsset'); }
+      if (d.fa !== null) { leftSegs.push({ key: 'fixedAsset', val: d.fa }); usedKeys.add('fixedAsset'); }
+      // 残差（その他資産）
+      const sumLeft = (d.ca ?? 0) + (d.fa ?? 0);
+      if (d.ta !== null && d.ta - sumLeft > 1) {
+        leftSegs.push({ key: 'currentAsset', val: d.ta - sumLeft, label: 'その他' });
+      }
+    } else if (d.ta !== null) {
+      leftSegs.push({ key: 'currentAsset', val: d.ta });
+    }
+
+    // 右バー（負債＋純資産）
+    const rightSegs = [];
+    if (d.cl !== null) { rightSegs.push({ key: 'currentLiab', val: d.cl }); usedKeys.add('currentLiab'); }
+    if (d.fl !== null) { rightSegs.push({ key: 'fixedLiab',   val: d.fl }); usedKeys.add('fixedLiab'); }
+    if (d.eq !== null) { rightSegs.push({ key: 'equity',      val: d.eq }); usedKeys.add('equity'); }
+    // 残差（その他負債）
+    if (d.ta !== null && rightSegs.length > 0) {
+      const sumRight = rightSegs.reduce((s, x) => s + x.val, 0);
+      if (d.ta - sumRight > 1) {
+        rightSegs.push({ key: 'currentLiab', val: d.ta - sumRight, label: 'その他負債' });
+      }
+    }
+
+    const makebar = (segs) => {
+      const bar = document.createElement('div');
+      bar.className = 'bs-bar';
+      const totalSeg = segs.reduce((s, x) => s + x.val, 0) || 1;
+      const barH = Math.round(H * scale);
+      segs.forEach(seg => {
+        const h = Math.round(barH * seg.val / totalSeg);
+        if (h <= 0) return;
+        const el = document.createElement('div');
+        el.className = 'bs-seg';
+        el.style.cssText = `height:${h}px;background:${BS_COLORS[seg.key]};`;
+        el.title = `${seg.label ?? BS_LABELS[seg.key]}: ${fmtMoney(seg.val)}`;
+        if (h >= 18) {
+          const lbl = document.createElement('span');
+          lbl.className = 'bs-seg-lbl';
+          lbl.textContent = seg.label ?? BS_LABELS[seg.key];
+          el.appendChild(lbl);
+        }
+        bar.appendChild(el);
+      });
+      return bar;
+    };
+
+    const barsWrap = document.createElement('div');
+    barsWrap.className = 'bs-visual-bars';
+    if (leftSegs.length)  barsWrap.appendChild(makebar(leftSegs));
+    if (rightSegs.length) barsWrap.appendChild(makebar(rightSegs));
+
+    const lbl1 = document.createElement('div');
+    lbl1.className = 'bs-bar-lbl';
+    lbl1.style.cssText = 'display:flex;gap:4px;justify-content:center;font-size:9px;color:#aaa;margin-top:2px;';
+    lbl1.innerHTML = leftSegs.length && rightSegs.length ? '<span>資産</span><span>負債+純資産</span>' : '';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'bs-co-name';
+    nameEl.innerHTML = `<span class="bs-co-code">${d.code}</span><br>${co?.name || ''}`;
+
+    const coEl = document.createElement('div');
+    coEl.className = 'bs-visual-co';
+    coEl.appendChild(barsWrap);
+    coEl.appendChild(lbl1);
+    coEl.appendChild(nameEl);
+    container.appendChild(coEl);
+  });
+
+  // 凡例
+  [...usedKeys].forEach(key => {
+    const item = document.createElement('div');
+    item.className = 'bs-legend-item';
+    item.innerHTML = `<div class="bs-legend-dot" style="background:${BS_COLORS[key]}"></div>${BS_LABELS[key]}`;
+    legend.appendChild(item);
   });
 }
 
