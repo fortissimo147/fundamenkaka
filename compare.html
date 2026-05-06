@@ -27,7 +27,7 @@ header p { font-size: 12px; color: #888; margin-top: 2px; }
 .co-sector-s { color: #999; font-size: 10px; margin-left: auto; white-space: nowrap; }
 #add-co-btn { font-size: 12px; background: #1a1a1a; color: #fff; border: none; border-radius: 7px; padding: 7px 16px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
 #add-co-btn:hover { background: #333; }
-.year-wrap { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.year-wrap { display: flex; align-items: center; gap: 6px; }
 .year-wrap label { font-size: 11px; color: #888; white-space: nowrap; }
 #year-select { font-size: 12px; border: 0.5px solid #e0ddd8; border-radius: 7px; padding: 6px 10px; outline: none; background: #fff; color: #1a1a1a; cursor: pointer; }
 
@@ -67,6 +67,31 @@ tr:last-child td { border-bottom: none; }
 .val-best  { color: #27500A; font-weight: 600; }
 .val-worst { color: #C0392B; }
 .val-na    { color: #ccc; font-size: 11px; }
+
+/* ===== 手動入力セル ===== */
+.val-cell-manual { padding: 4px 8px; min-height: 38px; display: flex; align-items: center; }
+.val-input-manual {
+  font-size: 12px; border: 0.5px solid #e8e5e0; border-radius: 5px;
+  padding: 4px 7px; background: #fffdf9; color: #1a1a1a; outline: none;
+  width: 100%; text-align: right;
+}
+.val-input-manual:focus { border-color: #aaa; background: #fff; }
+.val-input-manual::placeholder { color: #ccc; font-size: 10px; text-align: left; }
+
+/* ===== 自由記述行 ===== */
+.free-label-input {
+  font-size: 12px; border: 0.5px solid #e0ddd8; border-radius: 4px;
+  padding: 3px 6px; background: #fff; color: #1a1a1a; outline: none;
+  width: calc(100% - 26px); min-width: 0;
+}
+.free-label-input:focus { border-color: #aaa; }
+.free-val-input {
+  font-size: 12px; border: 0.5px solid #e8e5e0; border-radius: 5px;
+  padding: 4px 7px; background: #fffdf9; color: #1a1a1a; outline: none;
+  width: 100%; text-align: right;
+}
+.free-val-input:focus { border-color: #aaa; background: #fff; }
+.free-val-input::placeholder { color: #ccc; font-size: 11px; }
 
 /* ===== 指標追加・カスタム計算式 ===== */
 .add-row { padding: 8px 12px; border-top: 0.5px solid #e0ddd8; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: #fff; }
@@ -147,6 +172,12 @@ tr:last-child td { border-bottom: none; }
         </label>
         <button id="formula-add-btn">+ 追加</button>
       </div>
+
+      <!-- 自由記述行 -->
+      <div class="add-row">
+        <span class="add-row-label">自由記述</span>
+        <button id="free-row-add-btn">+ 行を追加</button>
+      </div>
     </div>
   </div>
 </div>
@@ -155,12 +186,14 @@ tr:last-child td { border-bottom: none; }
 let companies  = [];
 let plData = {}, bsData = {};
 let plHeaders = [], bsHeaders = [];
-let allPlData = {}, allBsData = {};  // year → {code → row}
+let allPlData = {}, allBsData = {};
 let selectedCodes   = [];
-let metrics         = [];   // {type:'col',  key, source}
-                             // {type:'custom', label, leftKey, leftSrc, op, rightKey, rightSrc, rightConst, pct}
+let metrics         = [];
 let pendingCode     = null;
 let availableYears  = [];
+let manualOverrides = {};  // key: "idx_code" → value string
+let freeTextRows    = [];  // [{id, label, values: {code: text}}]
+let freeRowCounter  = 0;
 
 const DEFAULT_METRICS = [
   {type:'col', key:'売上高',       source:'pl'},
@@ -201,7 +234,6 @@ function fmtVal(key, raw) {
 function fmtCustom(v, pct) {
   if (!isFinite(v)) return null;
   if (pct) return (v * 100).toFixed(1) + '%';
-  // 小さい数値はそのまま（比率など）
   const a = Math.abs(v);
   if (a < 1000) return v.toFixed(2);
   return fmtMoney(v);
@@ -287,6 +319,8 @@ async function loadData() {
     initSearch();
 
     sel.addEventListener('change', () => {
+      saveState();
+      manualOverrides = {};
       loadYear(sel.value);
       if (selectedCodes.length) renderTable();
     });
@@ -322,6 +356,21 @@ function parseCompanies(text) {
   }
 }
 
+// ===== 状態保存（再描画前に現在の入力値を保存） =====
+function saveState() {
+  document.querySelectorAll('.val-input-manual').forEach(input => {
+    manualOverrides[input.dataset.ok] = input.value;
+  });
+  document.querySelectorAll('.free-label-input').forEach(input => {
+    const fr = freeTextRows.find(r => r.id === +input.dataset.fid);
+    if (fr) fr.label = input.value;
+  });
+  document.querySelectorAll('.free-val-input').forEach(input => {
+    const fr = freeTextRows.find(r => r.id === +input.dataset.fid);
+    if (fr) fr.values[input.dataset.code] = input.value;
+  });
+}
+
 // ===== ドロップダウン構築 =====
 function buildColOptions(sel, includeConst = false) {
   sel.innerHTML = '';
@@ -346,12 +395,9 @@ function buildColOptions(sel, includeConst = false) {
 }
 
 function populateDropdowns() {
-  // 既存指標追加ドロップダウン
   const ms = document.getElementById('metric-select');
   ms.innerHTML = '<option value="">列を選択...</option>';
   buildColOptions(ms);
-
-  // カスタム計算式 左右オペランド
   buildColOptions(document.getElementById('formula-left'));
   buildColOptions(document.getElementById('formula-right'), true);
 }
@@ -392,34 +438,28 @@ function initSearch() {
     if (e.key === 'Enter' && pendingCode) { addCompany(pendingCode); input.value = ''; pendingCode = null; }
   });
 
-  // 既存指標追加
   document.getElementById('metric-add-btn').addEventListener('click', () => {
     const val = document.getElementById('metric-select').value;
     if (!val) return;
     const sep = val.indexOf(':'), source = val.slice(0, sep), key = val.slice(sep+1);
     if (!metrics.find(m => m.type === 'col' && m.key === key && m.source === source)) {
-      metrics.push({type:'col', key, source}); renderTable();
+      saveState(); metrics.push({type:'col', key, source}); renderTable();
     }
     document.getElementById('metric-select').value = '';
   });
 
-  // カスタム計算式: 右辺が定数のとき数値入力を表示
   document.getElementById('formula-right').addEventListener('change', function() {
     document.getElementById('formula-right-const').style.display =
       this.value === '__const__' ? 'inline-block' : 'none';
   });
 
-  // カスタム計算式を追加
   document.getElementById('formula-add-btn').addEventListener('click', () => {
     const label = document.getElementById('formula-name').value.trim();
     if (!label) { alert('指標名を入力してください'); return; }
-
     const leftVal = document.getElementById('formula-left').value;
     if (!leftVal) { alert('左辺の列を選択してください'); return; }
     const [leftSrc, leftKey] = [leftVal.slice(0, leftVal.indexOf(':')), leftVal.slice(leftVal.indexOf(':')+1)];
-
     const op = document.getElementById('formula-op').value;
-
     const rightVal = document.getElementById('formula-right').value;
     let rightKey = null, rightSrc = null, rightConst = null;
     if (rightVal === '__const__') {
@@ -429,11 +469,16 @@ function initSearch() {
     } else {
       [rightSrc, rightKey] = [rightVal.slice(0, rightVal.indexOf(':')), rightVal.slice(rightVal.indexOf(':')+1)];
     }
-
     const pct = document.getElementById('formula-pct').checked;
-    metrics.push({type:'custom', label, leftKey, leftSrc, op, rightKey, rightSrc, rightConst, pct});
+    saveState(); metrics.push({type:'custom', label, leftKey, leftSrc, op, rightKey, rightSrc, rightConst, pct});
     renderTable();
     document.getElementById('formula-name').value = '';
+  });
+
+  document.getElementById('free-row-add-btn').addEventListener('click', () => {
+    saveState();
+    freeTextRows.push({ id: freeRowCounter++, label: '', values: {} });
+    renderTable();
   });
 }
 
@@ -441,10 +486,11 @@ function initSearch() {
 function addCompany(code) {
   if (selectedCodes.includes(code)) return;
   if (selectedCodes.length >= 8) { alert('最大8社まで追加できます'); return; }
-  selectedCodes.push(code); renderChips(); renderTable();
+  saveState(); selectedCodes.push(code); renderChips(); renderTable();
 }
-function removeCompany(code) { selectedCodes = selectedCodes.filter(c => c !== code); renderChips(); renderTable(); }
-function removeMetric(idx) { metrics.splice(idx, 1); renderTable(); }
+function removeCompany(code) { saveState(); selectedCodes = selectedCodes.filter(c => c !== code); renderChips(); renderTable(); }
+function removeMetric(idx) { saveState(); metrics.splice(idx, 1); renderTable(); }
+function removeFreeRow(id) { saveState(); freeTextRows = freeTextRows.filter(r => r.id !== id); renderTable(); }
 
 function renderChips() {
   const row = document.getElementById('chips-row');
@@ -464,7 +510,6 @@ function evalCustom(m, code) {
   const leftRow = m.leftSrc === 'pl' ? plData[code] : bsData[code];
   const left = parseFloat(leftRow?.[m.leftKey]);
   if (!isFinite(left)) return null;
-
   let right;
   if (m.rightConst !== null) {
     right = m.rightConst;
@@ -473,7 +518,6 @@ function evalCustom(m, code) {
     right = parseFloat(rightRow?.[m.rightKey]);
     if (!isFinite(right)) return null;
   }
-
   switch (m.op) {
     case '+': return left + right;
     case '-': return left - right;
@@ -521,17 +565,32 @@ function renderTable() {
   body.innerHTML = '';
 
   metrics.forEach((m, idx) => {
-    // 各社の値を取得
-    const rawVals = selectedCodes.map(code => {
+    // 元データの取得（nullかどうか判定用）
+    const origFmts = selectedCodes.map(code => {
       if (m.type === 'col') {
         const row = m.source === 'pl' ? plData[code] : bsData[code];
-        return row?.[m.key] ?? '';
+        return fmtVal(m.key, row?.[m.key] ?? '');
       } else {
-        return evalCustom(m, code);
+        const v = evalCustom(m, code);
+        return v === null ? null : fmtCustom(v, m.pct);
       }
     });
 
-    const nums   = rawVals.map(v => v === null ? NaN : parseFloat(v));
+    // ベスト/ワースト比較用の数値（手動入力値も含む）
+    const nums = selectedCodes.map((code, i) => {
+      if (origFmts[i] !== null) {
+        if (m.type === 'col') {
+          const row = m.source === 'pl' ? plData[code] : bsData[code];
+          return parseFloat(row?.[m.key] ?? '');
+        } else {
+          return evalCustom(m, code);
+        }
+      }
+      // 手動入力値
+      const ok = `${idx}_${code}`;
+      const mv = parseFloat(manualOverrides[ok] || '');
+      return isFinite(mv) ? mv : NaN;
+    });
     const valids = nums.filter(v => isFinite(v));
     const maxV   = valids.length ? Math.max(...valids) : null;
     const minV   = valids.length ? Math.min(...valids) : null;
@@ -548,14 +607,24 @@ function renderTable() {
     </div>`;
     tr.appendChild(tdL);
 
-    rawVals.forEach((raw, i) => {
-      const td  = document.createElement('td');
-      const fmt = m.type === 'col'
-        ? fmtVal(m.key, raw)
-        : fmtCustom(raw, m.pct);
+    selectedCodes.forEach((code, i) => {
+      const td = document.createElement('td');
+      const fmt = origFmts[i];
 
       if (fmt === null) {
-        td.innerHTML = `<div class="val-cell val-na">—</div>`;
+        // データ欠落 → 手動入力セル
+        const ok = `${idx}_${code}`;
+        const saved = manualOverrides[ok] || '';
+        const input = document.createElement('input');
+        input.className = 'val-input-manual';
+        input.type = 'text';
+        input.placeholder = '情報源のデータ欠落により手動入力が必要';
+        input.value = saved;
+        input.dataset.ok = ok;
+        const wrapper = document.createElement('div');
+        wrapper.className = 'val-cell-manual';
+        wrapper.appendChild(input);
+        td.appendChild(wrapper);
       } else {
         let cls = 'val-cell';
         if (valids.length > 1 && isFinite(nums[i])) {
@@ -564,6 +633,46 @@ function renderTable() {
         }
         td.innerHTML = `<div class="${cls}">${fmt}</div>`;
       }
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+
+  // 自由記述行
+  freeTextRows.forEach(fr => {
+    const tr  = document.createElement('tr');
+    const tdL = document.createElement('td');
+    tdL.className = 'col-label';
+    const labelInput = document.createElement('input');
+    labelInput.className = 'free-label-input';
+    labelInput.type = 'text';
+    labelInput.placeholder = '項目名';
+    labelInput.value = fr.label;
+    labelInput.dataset.fid = fr.id;
+    const delBtn = document.createElement('button');
+    delBtn.className = 'metric-del';
+    delBtn.textContent = '×';
+    delBtn.onclick = () => removeFreeRow(fr.id);
+    const cell = document.createElement('div');
+    cell.className = 'col-label-cell';
+    cell.appendChild(labelInput);
+    cell.appendChild(delBtn);
+    tdL.appendChild(cell);
+    tr.appendChild(tdL);
+
+    selectedCodes.forEach(code => {
+      const td = document.createElement('td');
+      const input = document.createElement('input');
+      input.className = 'free-val-input';
+      input.type = 'text';
+      input.placeholder = '—';
+      input.value = fr.values[code] || '';
+      input.dataset.fid = fr.id;
+      input.dataset.code = code;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'val-cell-manual';
+      wrapper.appendChild(input);
+      td.appendChild(wrapper);
       tr.appendChild(td);
     });
     body.appendChild(tr);
