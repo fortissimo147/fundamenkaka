@@ -203,7 +203,10 @@ tr:last-child td { border-bottom: none; }
 
   <!-- BS構成比 -->
   <div class="bs-visual-card" id="bs-visual-card" style="display:none;">
-    <div class="bs-visual-title">BSの構成比（左: 資産　右: 負債＋純資産）</div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+      <div class="bs-visual-title" style="margin-bottom:0;">BSの構成比（左: 資産　右: 負債＋純資産）</div>
+      <button id="bs-detail-btn" style="margin-left:auto;font-size:11px;background:none;border:0.5px solid #e0ddd8;border-radius:6px;padding:4px 10px;cursor:pointer;color:#555;white-space:nowrap;">詳細入力に切替</button>
+    </div>
     <div class="bs-visual-companies" id="bs-visual-companies"></div>
     <div class="bs-legend" id="bs-legend"></div>
   </div>
@@ -221,6 +224,8 @@ let availableYears  = [];
 let manualOverrides = {};
 let freeTextRows    = [];
 let freeRowCounter  = 0;
+let bsDetailMode    = false;
+let bsDetailInputs  = {}; // { code: { ca, fa, cl, fl } }
 
 const DEFAULT_METRICS = [
   {type:'col', key:'売上高',       source:'pl'},
@@ -443,6 +448,10 @@ function saveState() {
     const fr = freeTextRows.find(r => r.id === +input.dataset.fid);
     if (fr) fr.values[input.dataset.code] = input.value;
   });
+  document.querySelectorAll('.bs-detail-input').forEach(input => {
+    if (!bsDetailInputs[input.dataset.code]) bsDetailInputs[input.dataset.code] = {};
+    bsDetailInputs[input.dataset.code][input.dataset.field] = input.value;
+  });
 }
 
 // ===== ドロップダウン構築 =====
@@ -553,6 +562,14 @@ function initSearch() {
     saveState();
     freeTextRows.push({ id: freeRowCounter++, label: '', values: {} });
     renderTable();
+  });
+
+  document.getElementById('bs-detail-btn').addEventListener('click', () => {
+    saveState();
+    bsDetailMode = !bsDetailMode;
+    document.getElementById('bs-detail-btn').textContent = bsDetailMode ? 'シンプル表示に戻す' : '詳細入力に切替';
+    if (selectedCodes.length) renderTable();
+    renderBSVisual();
   });
 }
 
@@ -705,6 +722,41 @@ function renderTable() {
     body.appendChild(tr);
   });
 
+  // BS詳細入力行（詳細モード時のみ）
+  if (bsDetailMode) {
+    const detailFields = [
+      { field: 'ca', label: '流動資産（BS）' },
+      { field: 'fa', label: '固定資産（BS）' },
+      { field: 'cl', label: '流動負債（BS）' },
+      { field: 'fl', label: '固定負債（BS）' },
+    ];
+    detailFields.forEach(({ field, label }) => {
+      const tr  = document.createElement('tr');
+      const tdL = document.createElement('td');
+      tdL.className = 'col-label';
+      tdL.innerHTML = `<div class="col-label-cell"><span>${label}</span><span class="metric-custom-badge">BS</span></div>`;
+      tr.appendChild(tdL);
+      selectedCodes.forEach(code => {
+        if (!bsDetailInputs[code]) bsDetailInputs[code] = {};
+        const td = document.createElement('td');
+        const input = document.createElement('input');
+        input.className = 'bs-detail-input val-input-manual';
+        input.type = 'text';
+        input.placeholder = '金額を入力';
+        input.value = bsDetailInputs[code][field] || '';
+        input.dataset.code = code;
+        input.dataset.field = field;
+        input.addEventListener('change', () => { saveState(); renderBSVisual(); });
+        const wrapper = document.createElement('div');
+        wrapper.className = 'val-cell-manual';
+        wrapper.appendChild(input);
+        td.appendChild(wrapper);
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+  }
+
   freeTextRows.forEach(fr => {
     const tr  = document.createElement('tr');
     const tdL = document.createElement('td');
@@ -750,6 +802,8 @@ function renderTable() {
 }
 
 // ===== BS構成比の描画 =====
+function pn(v) { const n = parseFloat(v); return isFinite(n) ? n : null; }
+
 function renderBSVisual() {
   const card = document.getElementById('bs-visual-card');
   const container = document.getElementById('bs-visual-companies');
@@ -761,56 +815,66 @@ function renderBSVisual() {
   legend.innerHTML = '';
 
   const H = 180;
+  const usedKeys = new Set();
 
-  // 各社のBS数値を取得
   const coData = selectedCodes.map(code => {
-    const ca = getBsValWithOverride(code, BS_KEYS.currentAsset);
-    const fa = getBsValWithOverride(code, BS_KEYS.fixedAsset);
     const ta = getBsValWithOverride(code, BS_KEYS.totalAsset);
-    const cl = getBsValWithOverride(code, BS_KEYS.currentLiab);
-    const fl = getBsValWithOverride(code, BS_KEYS.fixedLiab);
     const eq = getBsValWithOverride(code, BS_KEYS.equity);
-    return { code, ca, fa, ta, cl, fl, eq };
+    const d  = bsDetailInputs[code] || {};
+    const ca = bsDetailMode ? pn(d.ca) : null;
+    const fa = bsDetailMode ? pn(d.fa) : null;
+    const cl = bsDetailMode ? pn(d.cl) : null;
+    const fl = bsDetailMode ? pn(d.fl) : null;
+    return { code, ta, eq, ca, fa, cl, fl };
   });
 
-  // スケール基準：最大総資産
   const maxTA = Math.max(...coData.map(d => d.ta ?? (d.ca ?? 0) + (d.fa ?? 0)), 1);
-
-  // 使用できる列があるか判定
-  const hasDetail = coData.some(d => d.ca !== null || d.fa !== null);
-  const usedKeys = new Set();
 
   coData.forEach(d => {
     const co = companies.find(c => c.code === d.code);
-    const totalAsset = d.ta ?? (d.ca ?? 0) + (d.fa ?? 0);
+    const totalAsset = d.ta ?? (bsDetailMode ? (d.ca ?? 0) + (d.fa ?? 0) : 0);
     if (!totalAsset) return;
 
     const scale = totalAsset / maxTA;
+    const barH = Math.round(H * scale);
 
     // 左バー（資産）
     const leftSegs = [];
-    if (hasDetail) {
+    if (bsDetailMode) {
       if (d.ca !== null) { leftSegs.push({ key: 'currentAsset', val: d.ca }); usedKeys.add('currentAsset'); }
-      if (d.fa !== null) { leftSegs.push({ key: 'fixedAsset', val: d.fa }); usedKeys.add('fixedAsset'); }
-      // 残差（その他資産）
+      if (d.fa !== null) { leftSegs.push({ key: 'fixedAsset',   val: d.fa }); usedKeys.add('fixedAsset'); }
       const sumLeft = (d.ca ?? 0) + (d.fa ?? 0);
       if (d.ta !== null && d.ta - sumLeft > 1) {
         leftSegs.push({ key: 'currentAsset', val: d.ta - sumLeft, label: 'その他' });
       }
-    } else if (d.ta !== null) {
-      leftSegs.push({ key: 'currentAsset', val: d.ta });
+    } else {
+      // シンプルモード：総資産を単一バー
+      leftSegs.push({ key: 'totalAsset', val: totalAsset });
+      usedKeys.add('totalAsset');
     }
 
-    // 右バー（負債＋純資産）
+    // 右バー（負債＋純資産）― 純資産は常に一番下
     const rightSegs = [];
-    if (d.cl !== null) { rightSegs.push({ key: 'currentLiab', val: d.cl }); usedKeys.add('currentLiab'); }
-    if (d.fl !== null) { rightSegs.push({ key: 'fixedLiab',   val: d.fl }); usedKeys.add('fixedLiab'); }
-    if (d.eq !== null) { rightSegs.push({ key: 'equity',      val: d.eq }); usedKeys.add('equity'); }
-    // 残差（その他負債）
-    if (d.ta !== null && rightSegs.length > 0) {
-      const sumRight = rightSegs.reduce((s, x) => s + x.val, 0);
-      if (d.ta - sumRight > 1) {
-        rightSegs.push({ key: 'currentLiab', val: d.ta - sumRight, label: 'その他負債' });
+    if (bsDetailMode) {
+      if (d.cl !== null) { rightSegs.push({ key: 'currentLiab', val: d.cl }); usedKeys.add('currentLiab'); }
+      if (d.fl !== null) { rightSegs.push({ key: 'fixedLiab',   val: d.fl }); usedKeys.add('fixedLiab'); }
+      // 残差負債（総資産 - 純資産 - 入力済負債）
+      if (d.ta !== null && d.eq !== null) {
+        const sumLiab = rightSegs.reduce((s, x) => s + x.val, 0);
+        const totalLiab = d.ta - d.eq;
+        if (totalLiab - sumLiab > 1) {
+          rightSegs.push({ key: 'currentLiab', val: totalLiab - sumLiab, label: 'その他負債' });
+        }
+      }
+      if (d.eq !== null) { rightSegs.push({ key: 'equity', val: d.eq }); usedKeys.add('equity'); }
+    } else {
+      // シンプルモード：負債（計算値）＋純資産（下）
+      if (d.eq !== null) {
+        const liab = totalAsset - d.eq;
+        if (liab > 0) { rightSegs.push({ key: 'liab', val: liab }); usedKeys.add('liab'); }
+        rightSegs.push({ key: 'equity', val: d.eq }); usedKeys.add('equity');
+      } else {
+        rightSegs.push({ key: 'liab', val: totalAsset }); usedKeys.add('liab');
       }
     }
 
@@ -818,18 +882,19 @@ function renderBSVisual() {
       const bar = document.createElement('div');
       bar.className = 'bs-bar';
       const totalSeg = segs.reduce((s, x) => s + x.val, 0) || 1;
-      const barH = Math.round(H * scale);
       segs.forEach(seg => {
         const h = Math.round(barH * seg.val / totalSeg);
         if (h <= 0) return;
+        const color = seg.key === 'liab' ? '#D85A30' : seg.key === 'totalAsset' ? '#378ADD' : BS_COLORS[seg.key];
+        const ltext = seg.label ?? (seg.key === 'liab' ? '負債' : seg.key === 'totalAsset' ? '総資産' : BS_LABELS[seg.key]);
         const el = document.createElement('div');
         el.className = 'bs-seg';
-        el.style.cssText = `height:${h}px;background:${BS_COLORS[seg.key]};`;
-        el.title = `${seg.label ?? BS_LABELS[seg.key]}: ${fmtMoney(seg.val)}`;
+        el.style.cssText = `height:${h}px;background:${color};`;
+        el.title = `${ltext}: ${fmtMoney(seg.val)}`;
         if (h >= 18) {
           const lbl = document.createElement('span');
           lbl.className = 'bs-seg-lbl';
-          lbl.textContent = seg.label ?? BS_LABELS[seg.key];
+          lbl.textContent = ltext;
           el.appendChild(lbl);
         }
         bar.appendChild(el);
@@ -843,7 +908,6 @@ function renderBSVisual() {
     if (rightSegs.length) barsWrap.appendChild(makebar(rightSegs));
 
     const lbl1 = document.createElement('div');
-    lbl1.className = 'bs-bar-lbl';
     lbl1.style.cssText = 'display:flex;gap:4px;justify-content:center;font-size:9px;color:#aaa;margin-top:2px;';
     lbl1.innerHTML = leftSegs.length && rightSegs.length ? '<span>資産</span><span>負債+純資産</span>' : '';
 
@@ -860,10 +924,19 @@ function renderBSVisual() {
   });
 
   // 凡例
-  [...usedKeys].forEach(key => {
+  const legendDefs = [
+    { key: 'totalAsset',  color: '#378ADD',             label: '総資産' },
+    { key: 'currentAsset',color: BS_COLORS.currentAsset,label: BS_LABELS.currentAsset },
+    { key: 'fixedAsset',  color: BS_COLORS.fixedAsset,  label: BS_LABELS.fixedAsset },
+    { key: 'liab',        color: '#D85A30',             label: '負債' },
+    { key: 'currentLiab', color: BS_COLORS.currentLiab, label: BS_LABELS.currentLiab },
+    { key: 'fixedLiab',   color: BS_COLORS.fixedLiab,   label: BS_LABELS.fixedLiab },
+    { key: 'equity',      color: BS_COLORS.equity,      label: BS_LABELS.equity },
+  ];
+  legendDefs.filter(x => usedKeys.has(x.key)).forEach(x => {
     const item = document.createElement('div');
     item.className = 'bs-legend-item';
-    item.innerHTML = `<div class="bs-legend-dot" style="background:${BS_COLORS[key]}"></div>${BS_LABELS[key]}`;
+    item.innerHTML = `<div class="bs-legend-dot" style="background:${x.color}"></div>${x.label}`;
     legend.appendChild(item);
   });
 }
